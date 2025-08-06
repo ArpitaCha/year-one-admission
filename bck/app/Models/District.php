@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use DB;
+use Session;
+
+class District extends Model
+{
+    protected $table        =   'jexpo_district_master';
+    protected $primaryKey   =   'district_id_pk';
+    public $timestamps      =   false;
+
+    protected $guarded = [];
+    public function state()
+    {
+        return $this->hasOne('App\Models\State', "state_id_pk", "state_id_fk")->withDefault(function () {
+            return new State();
+        });
+    }
+}
