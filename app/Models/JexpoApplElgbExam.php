@@ -13,4 +13,16 @@ class JexpoApplElgbExam extends Model
     public $timestamps      =   false;
 
     protected $guarded = [];
+    public function board()
+    {
+        return $this->hasOne('App\Models\Board', "id", "exam_board")->withDefault(function () {
+            return new Board();
+        });
+    }
+    public function stateboard()
+    {
+        return $this->hasOne('App\Models\Board', "state_code", "exam_state_code")->withDefault(function () {
+            return new Board();
+        });
+    }
 }

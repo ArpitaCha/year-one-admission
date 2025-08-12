@@ -12,4 +12,10 @@ class Institute extends Model
     public $timestamps      =   false;
 
     protected $guarded = [];
+    public function district()
+    {
+        return $this->hasOne('App\Models\District', "district_name", "i_dist_code")->withDefault(function () {
+            return new District();
+        });
+    }
 }

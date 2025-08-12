@@ -51,7 +51,8 @@ Route::prefix('master')->group(function () {
     Route::post('/caste-list/{user_type?}', [CommonController::class, 'allCastes']);
     Route::get('/subdivision-list/{dist_id?}/{user_type?}', [CommonController::class, 'allSubdivisions']);
     Route::get('/eligibility-list/{user_type?}', [CommonController::class, 'eligibilityList']);
-    Route::post('/board-list/{user_type?}', [CommonController::class, 'boardList']);
+    Route::get('/eligibility-state-list/{user_type?}', [CommonController::class, 'eligibilityStateList']);
+    Route::get('/board-list/{code}/{user_type?}', [CommonController::class, 'boardList']);
 });
 Route::get('/dashboard-count', [DashboardController::class, 'countDashboardCards']);
 Route::prefix('student')->group(function () {
@@ -64,8 +65,9 @@ Route::post('/admission-payment-fees', [PaymentController::class, 'AdmissionPaym
 
 Route::prefix('admission')->group(function () {
     Route::post('/submit', [AdmissionController::class, 'submitStudents']);
-    Route::post('/student-personal-save', [AdmissionController::class, 'studentPersonalSubmit']);
-    Route::post('/student-educational-save', [AdmissionController::class, 'studentEducationalSubmit']);
+    Route::get('/admission-list', [AdmissionController::class, 'admissionList']);
+    Route::get('/verifier-list', [AdmissionController::class, 'verifierList']);
+    Route::get('/add-verifier', [AdmissionController::class, 'Addverifier']);
 });
 Route::get('/clear', function () {
     Artisan::call('optimize:clear');

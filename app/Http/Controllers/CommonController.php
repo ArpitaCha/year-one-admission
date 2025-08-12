@@ -11,9 +11,12 @@ use Illuminate\Http\Request;
 use App\Models\Trade;
 use App\Models\District;
 use App\Models\Board;
+use App\Models\Role;
 use App\Models\State;
 use App\Models\Institute;
 use App\Models\Eligibility;
+use App\Models\AuthPermission;
+use App\Models\AuthUrl;
 use App\Models\AlotedAdmittedSeatMaster;
 use App\Models\AlotedAdmittedPvtSeatMaster;
 use App\Models\SpotSeatMaster;
@@ -207,28 +210,28 @@ class CommonController extends Controller
     //Institute List
     public function allInstList(Request $request, $type = null)
     {
-        if ($type) {
-            $inst_res = null;
-            $res = null;
-            $inst_list = Institute::where('is_active',  1)->orderBy('i_name', 'ASC')->get();
+        // if ($type) {
+        //     $inst_res = null;
+        //     $res = null;
+        //     $inst_list = Institute::where('is_active',  1)->orderBy('i_name', 'ASC')->get();
 
-            $res = InstituteResource::collection($inst_list);
-            if (sizeof($inst_list) > 0) {
-                $reponse = array(
-                    'error'     =>  false,
-                    'message'   =>  'Institute found',
-                    'count'     =>   sizeof($inst_list),
-                    'instituteList'   =>  $res
-                );
-                return response(json_encode($reponse), 200);
-            } else {
-                $reponse = array(
-                    'error'     =>  true,
-                    'message'   =>  'No data found'
-                );
-                return response(json_encode($reponse), 200);
-            }
-        }
+        //     $res = InstituteResource::collection($inst_list);
+        //     if (sizeof($inst_list) > 0) {
+        //         $reponse = array(
+        //             'error'     =>  false,
+        //             'message'   =>  'Institute found',
+        //             'count'     =>   sizeof($inst_list),
+        //             'instituteList'   =>  $res
+        //         );
+        //         return response(json_encode($reponse), 200);
+        //     } else {
+        //         $reponse = array(
+        //             'error'     =>  true,
+        //             'message'   =>  'No data found'
+        //         );
+        //         return response(json_encode($reponse), 200);
+        //     }
+        // }
         if ($request->header('token')) {
             $now    =   date('Y-m-d H:i:s');
             $stream    =   $request->stream;
@@ -250,43 +253,15 @@ class CommonController extends Controller
                         $inst_res = null;
                         $res = null;
 
-                        if ($user_role == 2) {   //if student
-                            $inst_list = DB::table('alloted_admitted_seat_master as sm')
-                                ->join('institute_master as im', 'im.i_code', '=', 'sm.sm_inst_code')
-                                ->select([
-                                    'im.i_id as institute_id',
-                                    'sm.sm_inst_code as institute_code',
-                                    'im.i_name as institute_name',
-                                    'im.i_type as institute_type',
-                                ])
-                                ->distinct()
-                                ->where('im.is_active', 1)
-                                ->whereRaw('(sqogen + sqosc + sqost + sqpwd + tfw) > 0');
+                        $inst_list = Institute::where('is_active',  1)->orderBy('i_name', 'ASC')->get();
 
-                            if (!empty($stream)) {
-                                $inst_list->whereIn('i_code', $inst_codes);
-                            }
-                            $inst_res = $inst_list->orderBy('i_name', 'ASC')->get();
-                            $res = $inst_res;
-                        } else {
-                            if (!empty($stream)) {
-                                $inst_codes = DB::table('seat_master')->where('sm_trade_code', $stream)->pluck('sm_inst_code');
-                            }
+                        $res = InstituteResource::collection($inst_list);
 
-                            $inst_list = Institute::where('is_active',  1);
-
-                            if (!empty($stream)) {
-                                $inst_list->whereIn('i_code', $inst_codes);
-                            }
-                            $inst_res = $inst_list->orderBy('i_name', 'ASC')->get();
-                            $res = InstituteResource::collection($inst_res);
-                        }
-
-                        if (sizeof($inst_res) > 0) {
+                        if (sizeof($res) > 0) {
                             $reponse = array(
                                 'error'     =>  false,
                                 'message'   =>  'Institute found',
-                                'count'     =>   sizeof($inst_res),
+                                'count'     =>   sizeof($res),
                                 'instituteList'   =>  $res
                             );
                             return response(json_encode($reponse), 200);
@@ -1532,7 +1507,7 @@ class CommonController extends Controller
                                 return response(json_encode($reponse), 200);
                             } else {
                                 $reponse = array(
-                                    'error'     =>  true,
+                                    'error'     =>  false,
                                     'message'   =>  'No subdivision available'
                                 );
                                 return response(json_encode($reponse), 200);
@@ -1609,11 +1584,10 @@ class CommonController extends Controller
             }
         }
     }
-    public function boardList(Request $request, $type = null,)
+    public function boardList(Request $request, $code, $type = null,)
     {
         if ($type) {
-            $state = $request->state_name;
-            $board_list = Board::where('is_active', '1')->where('state_name', $state)->orderBy('id', 'ASC')->get();
+            $board_list = Board::where('is_active', '1')->where('state_code', $code)->orderBy('id', 'ASC')->get();
             if (sizeof($board_list) > 0) {
                 $reponse = array(
                     'error'     =>  false,
@@ -1629,6 +1603,196 @@ class CommonController extends Controller
                 );
                 return response(json_encode($reponse), 200);
             }
+        }
+    }
+    public function eligibilityStateList(Request $request, $type = null)
+    {
+        if ($type) {
+
+            $state_list = Board::where('is_active', '1')
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->groupBy('state_name')
+                ->map(function ($group, $state_name) {
+                    return [
+                        'name' => $state_name,
+                        'code' => $group->first()->state_code, // pick first code for the state name
+                    ];
+                })
+                ->values();
+            if ($state_list->count()) {
+                return response()->json([
+                    'error'   => false,
+                    'message' => 'Data found',
+                    'count'   => $state_list->count(),
+                    'list'    => $state_list
+                ], 200);
+            } else {
+                return response()->json([
+                    'error'   => true,
+                    'message' => 'No data available'
+                ], 200);
+            }
+        }
+    }
+
+    public function verifierType(Request $request)
+    {
+        if ($request->header('token')) {
+            $now    =   date('Y-m-d H:i:s');
+            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
+            if ($token_check) {  // check the token is expire or not
+                $user_id = $token_check->t_user_id;
+
+                $user_data = SuperUser::select('u_id', 'u_ref', 'u_role_id')->where('u_id', $user_id)->first();
+                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
+                // dd($role_url_access_id);
+
+                if (sizeof($role_url_access_id) > 0) {
+                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
+
+                    $url_data = array_column($urls, 'url_name');
+                    // dd($url_data);
+                    if (in_array('verifier-type', $url_data)) {
+
+
+                        $list = Role::where('is_active', 1)
+                            ->where('role_name', '!=', 'COUNCIL')
+                            ->where('role_name', '!=', 'STUDENT')
+                            ->orderBy('role_id', 'ASC')
+                            ->get()
+                            ->map(function ($item) {
+                                return [
+                                    'id' => $item->role_id,
+                                    'name' => $item->role_name
+                                ];
+                            });
+
+
+                        if (sizeof($list) > 0) {
+                            $reponse = array(
+                                'error'     =>  false,
+                                'message'   =>  'data found',
+                                'count'     =>   sizeof($list),
+                                'list'  =>  $list
+                            );
+                            return response(json_encode($reponse), 200);
+                        } else {
+                            $reponse = array(
+                                'error'     =>  true,
+                                'message'   =>  'No Religion available'
+                            );
+                            return response(json_encode($reponse), 200);
+                        }
+                    } else {
+                        return response()->json([
+                            'error'     =>  true,
+                            'message'   =>   "Oops! you don't have sufficient permission"
+                        ], 403);
+                    }
+                } else {
+                    return response()->json([
+                        'error'     =>  true,
+                        'message'   =>   "Oops! you don't have sufficient permission"
+                    ], 403);
+                }
+            } else {
+                return response()->json([
+                    'error'     =>  true,
+                    'message'   =>  'Unable to process your request due to invalid token'
+                ], 401);
+            }
+        }
+    }
+    public function InstituteWiseDistrict(Request $request)
+    {
+        if ($request->header('token')) {
+            $now    =   date('Y-m-d H:i:s');
+            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
+            if ($token_check) {  // check the token is expire or not
+                $user_id = $token_check->t_user_id;
+
+                $user_data = SuperUser::select('u_id', 'u_ref', 'u_role_id')->where('u_id', $user_id)->first();
+                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
+                // dd($role_url_access_id);
+
+                if (sizeof($role_url_access_id) > 0) {
+                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
+
+                    $url_data = array_column($urls, 'url_name');
+                    // dd($url_data);
+                    if (in_array('inst-wise-district', $url_data)) {
+                        $institute = $request->inst_code;
+
+                        $data = Institute::with('district')
+                            ->where('i_code', $institute)
+                            ->where('is_active', 1)
+                            ->first();
+
+                        if ($data) {
+                            $response = [
+                                'error'   => false,
+                                'message' => 'data found',
+                                'list'    => [
+                                    'i_dist_code'     => $data->i_dist_code,
+                                    'district_id'  => $data->district->district_id_pk ?? null
+                                ]
+                            ];
+                        } else {
+                            $response = [
+                                'error'   => true,
+                                'message' => 'No data available'
+                            ];
+                        }
+
+                        return response()->json($response, 200);
+                    } else {
+                        return response()->json([
+                            'error'     =>  true,
+                            'message'   =>   "Oops! you don't have sufficient permission"
+                        ], 403);
+                    }
+                } else {
+                    return response()->json([
+                        'error'     =>  true,
+                        'message'   =>   "Oops! you don't have sufficient permission"
+                    ], 403);
+                }
+            } else {
+                return response()->json([
+                    'error'     =>  true,
+                    'message'   =>  'Unable to process your request due to invalid token'
+                ], 401);
+            }
+        }
+    }
+    public function allRoles(Request $request)
+    {
+
+        $list = Role::where('is_active', 1)
+            ->orderBy('role_id', 'ASC')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'value' => $item->role_name,
+                    'label' => $item->role_description
+                ];
+            });
+
+        if (sizeof($list) > 0) {
+            $reponse = array(
+                'error'     =>  false,
+                'message'   =>  'data found',
+                'count'     =>   sizeof($list),
+                'list'  =>  $list
+            );
+            return response(json_encode($reponse), 200);
+        } else {
+            $reponse = array(
+                'error'     =>  true,
+                'message'   =>  'No data available'
+            );
+            return response(json_encode($reponse), 200);
         }
     }
 }
