@@ -53,6 +53,9 @@ Route::prefix('master')->group(function () {
     Route::get('/eligibility-list/{user_type?}', [CommonController::class, 'eligibilityList']);
     Route::get('/eligibility-state-list/{user_type?}', [CommonController::class, 'eligibilityStateList']);
     Route::get('/board-list/{code}/{user_type?}', [CommonController::class, 'boardList']);
+    Route::get('/verifier-type', [CommonController::class, 'verifierType']);
+    Route::post('/inst-wise-district', [CommonController::class, 'InstituteWiseDistrict']);
+    Route::get('/all_roles', [CommonController::class, 'allRoles']);
 });
 Route::get('/dashboard-count', [DashboardController::class, 'countDashboardCards']);
 Route::prefix('student')->group(function () {
@@ -62,12 +65,15 @@ Route::prefix('student')->group(function () {
     Route::get('/student-admission-fees-download/{form_num}', [StudentController::class, 'downloadAdmissionFees']);
 });
 Route::post('/admission-payment-fees', [PaymentController::class, 'AdmissionPaymentFees']);
+Route::get('/students/export', [StudentController::class, 'downloadAdmissionFeesExcel']);
 
 Route::prefix('admission')->group(function () {
     Route::post('/submit', [AdmissionController::class, 'submitStudents']);
     Route::get('/admission-list', [AdmissionController::class, 'admissionList']);
+    Route::post('/approve-council', [AdmissionController::class, 'approveCouncil']);
     Route::get('/verifier-list', [AdmissionController::class, 'verifierList']);
-    Route::get('/add-verifier', [AdmissionController::class, 'Addverifier']);
+    Route::post('/add-verifier', [AdmissionController::class, 'addVerifier']);
+    Route::get('/check-validation-fields/{role}', [AdmissionController::class, 'checkValidationFields']);
 });
 Route::get('/clear', function () {
     Artisan::call('optimize:clear');

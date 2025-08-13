@@ -635,7 +635,11 @@ class StudentController extends Controller
                                 's_gender'            => $request->student_gender,
                                 's_religion'          => $request->student_religion,
                                 's_caste'             => $request->student_caste,
-                                's_subdivision'       => $request->student_subdivision,
+                                's_subdivision' => (
+                                    isset($request->student_subdivision) &&
+                                    trim(strtolower($request->student_subdivision)) !== '' &&
+                                    trim(strtolower($request->student_subdivision)) !== 'null'
+                                ) ? $request->student_subdivision : null,
                                 's_address2'          => $request->student_address2,
                                 's_pwd'               => $request->is_pwd,
                                 's_photo'             => $student_photo,
@@ -767,5 +771,89 @@ class StudentController extends Controller
         return $pdf->setPaper('a4', 'portrait')
             ->setOption(['defaultFont' => 'sans-serif'])
             ->stream('application-fees.pdf');
+    }
+    public function downloadAdmissionFeesExcel(Request $request)
+    {
+        $studentsData = Student::with(['state', 'district', 'subdivision'])->orderBy('s_appl_form_num', 'asc')->get()->map(function ($student) {
+
+            $education = JexpoApplElgbExam::with('board')
+                ->where('exam_appl_form_num', $student->s_appl_form_num)
+                ->first();
+
+            $bank_details = $student->s_bank_details ? json_decode($student->s_bank_details, true) : [];
+            $subjects = $education && $education->exam_per_marks ? json_decode($education->exam_per_marks, true) : [];
+
+            $payment = PaymentTransaction::where([
+                'pmnt_modified_by' => $student->s_appl_form_num,
+                'pmnt_pay_type'    => 'APPLICATION'
+            ])->first();
+            $mathMarks = collect($subjects)
+                ->firstWhere('subject', 'Mathematics')['obtained'] ?? '';
+
+            $physcMarks = collect($subjects)
+                ->firstWhere('subject', 'Physical Science')['obtained'] ?? '';
+
+            return [
+                'Application Number' => $student->s_appl_form_num,
+                'Candidate Name'     => $student->s_candidate_name,
+                'Father Name'        => $student->s_father_name,
+                'Mother Name'        => $student->s_mother_name,
+                'DOB'                => $student->s_dob,
+                'Gender'             => $student->s_gender,
+                'Email'              => $student->s_email,
+                'Phone'              => $student->s_phone,
+                'State'              => $student->state->state_name ?? '',
+                'District'           => $student->district->district_name ?? '',
+                'Subdivision'        => $student->subdivision->name ?? '',
+                'PIN'                => $student->s_pin_no,
+                'Religion' => $student->s_religion,
+                'Caste' => $student->s_caste,
+                'TFW' => $student->s_tfw == 1 ? 'Yes' : 'No',
+                'LLQ' => $student->s_llq == 1 ? 'Yes' : 'No',
+                'EWS' => $student->s_ews == 1 ? 'Yes' : 'No',
+                'EXSM' => $student->s_exsm == 1 ? 'Yes' : 'No',
+                'Block' => $student->s_block,
+                'Post_Office' => $student->s_post_office,
+                'Police_Station' => $student->s_police_station,
+                'Aadharno' => decryptHEXFormat($student->s_aadhar_no),
+                'Married' => $student->is_married == 1 ? 'Yes' : 'No',
+                'Citizenship' => $student->s_citizenship,
+                'Caste_cert_no' => $student->cast_cert_number,
+                'Caste_cert_date' => $student->cast_cert_date,
+                'Cast_sub_category' => $student->cast_sub_category,
+                'EWS_cert_no' => $student->ews_cert_number,
+                'EWS_cert_date' => $student->ews_cert_date,
+
+                // Education Info
+                'Board'              => $education->board->board_name ?? '',
+                'Exam Name'          => $education->exam_elgb_code ?? '',
+                'Exam Pass Year'    => $education->exam_pass_yr ?? '',
+                'Exam School Name'    => $education->exam_school_name ?? '',
+
+                // Bank Info
+                'Bank Name'          => $bank_details['bankName'] ?? '',
+                'Account No'         => $bank_details['accNumber'] ?? '',
+                'IFSC Code'         => $bank_details['IFSC'] ?? '',
+
+                // Marks (flattened for excel)
+                'Subjects'           => collect($subjects)->pluck('subject')->implode(', '),
+                'Math_marks'         => $mathMarks,
+                'Physc_marks'        => $physcMarks,
+                'Total Marks'        => $education->exam_tot_marks ?? '',
+                'Obtained Marks'     => $education->exam_ob_marks ?? '',
+
+                // Payment Info
+                'Payment Amount'     => $payment->trans_amount ?? '',
+                'Payment Date' => $payment?->trans_time ? date('Y-m-d', strtotime($payment->trans_time)) : '',
+
+                'Payment Status'     => $payment->trans_status ?? '',
+            ];
+        });
+        return response()->json([
+            'error'     =>  false,
+            'data'  =>  $studentsData
+        ], 200);
+
+        // return Excel::download(new AllStudentsExport($studentsData), 'all-students.xlsx');
     }
 }

@@ -13,6 +13,8 @@ use App\Http\Controllers\wbscte\AuthController;
 use App\Http\Controllers\wbscte\OtherController;
 use App\Http\Controllers\wbscte\PaymentController;
 use App\Http\Controllers\wbscte\MgmtAdmissionController;
+use App\Exports\StudentsExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,4 +80,7 @@ Route::get('/symlink', function () {
     Artisan::call('storage:link');
 
     return "Symlink created successfully";
+});
+Route::get('/students/export', function () {
+    return Excel::download(new StudentsExport, 'students.xlsx');
 });

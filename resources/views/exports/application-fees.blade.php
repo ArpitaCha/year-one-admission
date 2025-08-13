@@ -159,7 +159,9 @@
 
     <tr>
         <td><strong>  Candidate's Name:</strong></td>
-        <td colspan="3">{{ $students->s_candidate_name }}</td>
+        <td>{{ $students->s_candidate_name }}</td>
+         <td>@if(!empty($students->s_gender == 'FEMALE'))<strong>Kanyashree No</strong>@endif</td>
+        <td>{{ $students->s_kanyashree }}</td>
     </tr>
      <tr>
         <td><strong>Father’s Name</strong></td>
@@ -172,7 +174,13 @@
         <td>{{ \Carbon\Carbon::parse($students->s_dob)->format('d-m-Y') }}</td>
         <td><strong>Gender</strong></td>
         <td>{{ $students->s_gender }}</td>
+        
     </tr>
+    {{-- <tr>
+        <td>@if(!empty($students->s_gender == 'FEMALE'))<strong>Kanyashree No</strong>@endif</td>
+        <td>{{ $students->s_kanyashree }}</td>
+
+    </tr> --}}
    
     <tr>
         <td><strong>Email No.</strong></td>
@@ -365,22 +373,34 @@
 </table>
 <table>
     <tr>
+        <th colspan="2" style="text-align:left; font-size:16px;">PWD Details</th>
+    </tr>
+   
+    <tr>
+        <td style="width:80%;"><strong>Are you a person with a disability?</strong></td>
+        <td>{{ $students->s_pwd == 1 ? 'Yes' : 'No'  }}</td>
+
+    </tr>
+</table>
+<table>
+    <tr>
         <th colspan="2" style="text-align:left; font-size:16px;">LLQ Details</th>
     </tr>
    
     <tr>
-        <td style="width:80%;"><strong>Are you an LLQ?</strong></td>
+        <td style="width:80%;"><strong>Do you want to avail the Land Loser Quota?</strong></td>
         <td>{{ $students->s_llq == 1 ? 'Yes' : 'No'  }}</td>
 
     </tr>
 </table>
+
 <table>
       <tr>
         <th colspan="2" style="text-align:left; font-size:16px;">TFW Details</th>
     </tr>
    
     <tr>
-        <td style="width: 80%;"><strong>Are you a TFW?</strong></td>
+        <td style="width: 80%;"><strong>Do you want to avail the Tuition Fee Waiver?</strong></td>
         <td>{{ $students->s_tfw == 1 ? 'Yes' : 'No'  }}</td>
 
     </tr>
