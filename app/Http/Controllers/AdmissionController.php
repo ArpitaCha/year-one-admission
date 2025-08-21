@@ -24,6 +24,8 @@ use App\Models\SuperUser;
 use App\Models\AuditTrail;
 use App\Models\AuthPermission;
 use App\Models\AuthUrl;
+use Illuminate\Support\Facades\Http;
+
 
 
 
@@ -63,7 +65,7 @@ class AdmissionController extends Controller
                 'student_aadhar_document' => ['required'],
                 'student_age_proof_document' => ['required'],
                 'student_marksheet_document' => ['required'],
-                'student_block' => ['required'],
+                // 'student_block' => ['required'],
                 // 'exam_qualifications' => 'required',
                 'exam_board' => 'required',
                 'exam_pass_yr' => 'required',
@@ -71,6 +73,7 @@ class AdmissionController extends Controller
                 'obtained_marks' => 'required',
                 'exam_elgb_code' => 'required',
                 'exam_school_name' => 'required',
+                'exam_district' => 'required',
                 // 'exam_marks_type' => 'required',
                 'exam_marks' => 'required',
                 'exam_state' => 'required',
@@ -171,19 +174,34 @@ class AdmissionController extends Controller
                         ], 400);
                     }
                 }
-                $student_pwd_document_path = null;
+
                 if ($request->is_pwd === '1') {
-                    if ($request->hasFile('student_pwd_document')) {
+                    if ($request->hasFile('student_pwd_document') && $request->file('student_pwd_document')->isValid()) {
                         $document = $request->file('student_pwd_document');
                         $documentName = $s_appl_form_num . '_pwd_document.' . $document->getClientOriginalExtension();
                         $document->storeAs('uploads/', $documentName, 'public');
                         $student_pwd_document_path = 'uploads/' . $documentName;
-                    } else {
+                    } elseif (is_string($request->student_pwd_document)) {
+                        $student_pwd_document_path = $student->s_pwd_doc ?? null;
+                    }
+                    $pwd_certificate_number = trim($request->pc_cert_no ?? '') !== ''
+                        ? $request->pc_cert_no
+                        : ($student->pc_cert_no ?? null);
+
+                    $pwd_certificate_issue_date = trim($request->pc_cert_date ?? '') !== ''
+                        ? $request->pc_cert_date
+                        : ($student->pc_cert_date ?? null);
+                    if (empty($student_pwd_document_path) || empty($pwd_certificate_number) || empty($pwd_certificate_issue_date)) {
                         return response()->json([
                             'success' => false,
-                            'message' => 'PWD document is mandatory when PWD is selected.'
+                            'message' => 'PWD certificate number, issue date, and document are required when PWD is selected.'
                         ], 400);
                     }
+                } else {
+                    // EWS is not selected, so clear values
+                    $student_pwd_document_path = null;
+                    $pwd_certificate_number = '';
+                    $pwd_certificate_issue_date = '';
                 }
                 $student_llq_document_path = null;
                 if ($request->is_llq === '1') {
@@ -239,17 +257,20 @@ class AdmissionController extends Controller
                     } elseif (is_string($request->student_ews_document)) {
                         $student_ews_document_path = $student->s_ews_doc ?? null;
                     }
-                    $ews_certificate_number = trim($request->cert_number ?? '') !== ''
-                        ? $request->cert_number
-                        : ($student->cast_cert_number ?? null);
+                    $ews_certificate_number = trim($request->ews_cert_number ?? '') !== ''
+                        ? $request->ews_cert_number
+                        : ($student->ews_cert_number ?? null);
 
-                    $ews_certificate_issue_date = trim($request->cert_issue_date ?? '') !== ''
-                        ? $request->cert_issue_date
-                        : ($student->cast_cert_date ?? null);
-                    if (empty($student_ews_document_path) || empty($certificate_number) || empty($certificate_issue_date)) {
+                    $ews_certificate_issue_date = trim($request->ews_cert_date ?? '') !== ''
+                        ? $request->ews_cert_date
+                        : ($student->ews_cert_date ?? null);
+                    $ews_valid_year = trim($request->ews_valid_year ?? '') !== ''
+                        ? $request->ews_valid_year
+                        : ($student->ews_valid_year ?? null);
+                    if (empty($student_ews_document_path) || empty($ews_certificate_number) || empty($ews_certificate_issue_date) || empty($ews_valid_year)) {
                         return response()->json([
                             'success' => false,
-                            'message' => 'EWS certificate number, issue date, and document are required when EWS is selected.'
+                            'message' => 'EWS certificate number, valid year, issue date, and document are required when EWS is selected.'
                         ], 400);
                     }
                 } else {
@@ -257,7 +278,9 @@ class AdmissionController extends Controller
                     $student_ews_document_path = null;
                     $ews_certificate_number = '';
                     $ews_certificate_issue_date = '';
+                    $ews_valid_year = '';
                 }
+
                 if ($request->hasFile('student_aadhar_document')) {
                     $document = $request->file('student_aadhar_document');
                     $documentName = $s_appl_form_num . '_aadhar_document.' . $document->getClientOriginalExtension();
@@ -294,9 +317,7 @@ class AdmissionController extends Controller
                 // dd($certificate_number, $certificate_issue_date);
 
                 $bank_details = json_decode($request->bank_details, true);
-                $middleName = (!empty($request->student_middle_name) && strtolower(trim($request->student_middle_name)) !== 'null')
-                    ? Str::upper(trim($request->student_middle_name))
-                    : null;
+                $middleName = trim($request->student_middle_name);
                 $student->update([
                     's_first_name'     => trim($request->student_first_name),
                     's_middle_name'    => $middleName,
@@ -347,25 +368,35 @@ class AdmissionController extends Controller
                     'cast_sub_category' => $sub_caste_category,
                     'ews_cert_number' => $ews_certificate_number,
                     'ews_cert_date' => $ews_certificate_issue_date,
+                    'ews_valid_year' => $ews_valid_year,
+                    'pc_cert_no' => $pwd_certificate_number,
+                    'pc_cert_date' => $pwd_certificate_issue_date,
                     's_block' => $request->student_block,
                     's_adhar_doc' => $student_aadhar_document_path,
-                    's_bank_details' => json_encode($bank_details)
+                    's_bank_details' => json_encode($bank_details),
+
 
                 ]);
                 $exam_per_mrks = json_decode($request->exam_marks, true);
                 // dd($exam_per_mrks);
-                JexpoApplElgbExam::create([
-                    'exam_appl_form_num' => $s_appl_form_num,
-                    'exam_board'         => $request->exam_board,
-                    'exam_pass_yr'       => $request->exam_pass_yr,
-                    'exam_tot_marks'     => $request->exam_total_marks,
-                    'exam_ob_marks'      => $request->obtained_marks,
-                    'exam_elgb_code'     => $request->exam_elgb_code,
-                    'exam_marks_type'    => $request->exam_marks_type,
-                    'exam_state_code'         => $request->exam_state,
-                    'exam_school_name'   => $request->exam_school_name,
-                    'exam_per_marks'     =>  json_encode($exam_per_mrks),
-                ]);
+                JexpoApplElgbExam::updateOrCreate(
+                    [
+                        'exam_appl_form_num' => $s_appl_form_num,
+                    ],
+                    [
+                        'exam_elgb_code'    => $request->exam_elgb_code,
+                        'exam_board'         => $request->exam_board,
+                        'exam_pass_yr'       => $request->exam_pass_yr,
+                        'exam_tot_marks'     => $request->exam_total_marks,
+                        'exam_ob_marks'      => $request->obtained_marks,
+                        'exam_school_name'   => $request->exam_school_name,
+                        'exam_marks_type'    => $request->exam_marks_type ?? null,
+                        'exam_per_marks'     => json_encode($exam_per_mrks),
+                        'exam_state_code'         => $request->exam_state,
+                        'exam_district'      => $request->exam_district,
+                        'updated_at'         => now(),
+                    ]
+                );
                 auditTrail(
                     $s_appl_form_num,
                     "{$request->student_first_name} {$request->student_last_name} has successfully inserted profile at {$student->s_phone} on {$now}.",
@@ -377,7 +408,7 @@ class AdmissionController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'student updated successfully',
+                    'message' => 'student submitted successfully',
                     'is_profile_updated' => $is_student_updated
 
                 ], 200);
@@ -760,5 +791,21 @@ class AdmissionController extends Controller
                 'message' => 'Something went wrong: ' . $e->getMessage()
             ], 500);
         }
+    }
+    public function getBranchByIfsc(Request $request, $ifsc)
+    {
+        $ifsc = strtoupper($request->ifsc);
+        $response = Http::get("https://ifsc.razorpay.com/{$ifsc}");
+
+        if ($response->successful()) {
+            $data = $response->json();
+            return response()->json([
+                'bank'   => $data['BANK'] ?? null,
+                'branch' => $data['BRANCH'] ?? null,
+                'address' => $data['ADDRESS'] ?? null,
+            ]);
+        }
+
+        return response()->json(['error' => 'Invalid IFSC code'], 400);
     }
 }

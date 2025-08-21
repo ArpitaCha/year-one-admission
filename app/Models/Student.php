@@ -30,6 +30,12 @@ class Student extends Model
             return new Trade();
         });
     }
+    public function block()
+    {
+        return $this->hasOne('App\Models\Block', "id", "s_block")->withDefault(function () {
+            return new Block();
+        });
+    }
     public function state()
     {
         return $this->hasOne('App\Models\State', "state_id_pk", "s_state_id")->withDefault(function () {

@@ -42,7 +42,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 
 Route::prefix('master')->group(function () {
-    Route::post('/district-list/{state_code?}/{user_type?}', [CommonController::class, 'allDistricts']);
+    Route::get('/district-list/{state_code?}/{user_type?}', [CommonController::class, 'allDistricts']);
     Route::post('/institute-stream-wise/{user_type?}', [CommonController::class, 'allInstList']);
     Route::post('/institute-wise-stream', [CommonController::class, 'streamListinstListWise']);
     Route::post('/trade-list/{user_type?}', [CommonController::class, 'streamList']);
@@ -56,6 +56,8 @@ Route::prefix('master')->group(function () {
     Route::get('/verifier-type', [CommonController::class, 'verifierType']);
     Route::post('/inst-wise-district', [CommonController::class, 'InstituteWiseDistrict']);
     Route::get('/all_roles', [CommonController::class, 'allRoles']);
+    Route::get('/other-board', [CommonController::class, 'OtherBoard']);
+    Route::get('/block-list/{subdivision?}/{user_type?}', [CommonController::class, 'allBlocks']);
 });
 Route::get('/dashboard-count', [DashboardController::class, 'countDashboardCards']);
 Route::prefix('student')->group(function () {
@@ -65,7 +67,7 @@ Route::prefix('student')->group(function () {
     Route::get('/student-admission-fees-download/{form_num}', [StudentController::class, 'downloadAdmissionFees']);
 });
 Route::post('/admission-payment-fees', [PaymentController::class, 'AdmissionPaymentFees']);
-Route::get('/students/export', [StudentController::class, 'downloadAdmissionFeesExcel']);
+Route::post('/students/export', [StudentController::class, 'downloadAdmissionFeesExcel']);
 
 Route::prefix('admission')->group(function () {
     Route::post('/submit', [AdmissionController::class, 'submitStudents']);
@@ -75,6 +77,7 @@ Route::prefix('admission')->group(function () {
     Route::post('/add-verifier', [AdmissionController::class, 'addVerifier']);
     Route::get('/check-validation-fields/{role}', [AdmissionController::class, 'checkValidationFields']);
 });
+Route::get('/get-branch/{ifsc}', [AdmissionController::class, 'getBranchByIfsc']);
 Route::get('/clear', function () {
     Artisan::call('optimize:clear');
     Artisan::call('cache:clear');

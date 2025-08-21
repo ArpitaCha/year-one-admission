@@ -8,6 +8,7 @@ use App\Http\Resources\SuperUserResource;
 use App\Models\SuperUser;
 use Illuminate\Support\Str;
 use App\Models\Token;
+use App\Models\Otp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -91,9 +92,9 @@ class AuthController extends Controller
         $otp = env('APP_ENV') === 'local' ? 123456 : rand(111111, 999999);
         $to_phone = $to_phone;
         try {
-            if (DB::table('jexpo_otp_tbl')->where('username', $to_phone)->exists()) {
+            if (Otp::where('username', $to_phone)->exists()) {
 
-                $otp_res = DB::table('jexpo_otp_tbl')->where('username', $to_phone)->first();
+                $otp_res = Otp::where('username', $to_phone)->first();
                 $last_otp_date = substr(trim($otp_res->otp_created_on), 0, 10);
                 if ($last_otp_date == $today) {
 
@@ -102,8 +103,8 @@ class AuthController extends Controller
                         if ($minutes > 2) {
                             $sms_message_user = "{$otp} is your One Time Password (OTP). Don't share this with anyone. - WBSCTE&VE&SD";
                             $send_sms_user = send_sms($to_phone, $sms_message_user);
-                            DB::table('jexpo_otp_tbl')->where('username', $to_phone)->delete();
-                            DB::table('jexpo_otp_tbl')->insert(
+                            Otp::where('username', $to_phone)->delete();
+                            Otp::insert(
                                 [
                                     'username' => $to_phone,
                                     'otp' => $otp,
@@ -133,8 +134,8 @@ class AuthController extends Controller
 
                     $sms_message_user = "{$otp} is your One Time Password (OTP). Don't share this with anyone. - WBSCTE&VE&SD";
                     $send_sms_user = send_sms($to_phone, $sms_message_user);
-                    DB::table('jexpo_otp_tbl')->where('username', $to_phone)->delete();
-                    DB::table('jexpo_otp_tbl')->insert(
+                    Otp::where('username', $to_phone)->delete();
+                    Otp::insert(
                         [
                             'username' => $to_phone,
                             'otp' => $otp,
@@ -150,7 +151,7 @@ class AuthController extends Controller
                 $sms_message_user = "{$otp} is your One Time Password (OTP). Don't share this with anyone. - WBSCTE&VE&SD";
                 $send_sms_user = send_sms($to_phone, $sms_message_user);
 
-                DB::table('jexpo_otp_tbl')->insert(['username' => $to_phone, 'otp' => $otp, 'otp_created_on' => $now, 'otp_count' => 1]);
+                Otp::insert(['username' => $to_phone, 'otp' => $otp, 'otp_created_on' => $now, 'otp_count' => 1]);
             }
 
             if ($otp_send) {
@@ -195,8 +196,7 @@ class AuthController extends Controller
         $user_type = strtoupper($request->user_type);
 
         // OTP validation
-        $otp = DB::table('jexpo_otp_tbl')
-            ->where('username', $u_phone)
+        $otp = Otp::where('username', $u_phone)
             ->where('otp', $u_otp)
             ->first();
 
@@ -223,6 +223,7 @@ class AuthController extends Controller
                     $student_inserted_id = $user->s_id;
                     $s_appl_form_num = $user->s_appl_form_num;
                     $role_id = $user->u_role_id;
+                    $name = $user->s_candidate_name ?? '';
                 } else {
                     // Generate new application number
                     $year = date('Y');
@@ -243,13 +244,12 @@ class AuthController extends Controller
                         'created_at'      => $now,
 
                     ]);
-
+                    $name = '';
                     $student_inserted_id = $created->s_id;
                     $role_id = $created->u_role_id;
                     $is_student_updated = false;
                 }
 
-                // Get role name
                 $role_name = Role::where('role_id', $role_id)->value('role_name') ?? null;
 
                 $users = [
@@ -257,6 +257,7 @@ class AuthController extends Controller
                     's_id' => $student_inserted_id,
                     'role_id' => $role_name,
                     's_appl_form_num' => $s_appl_form_num,
+                    'u_name' => $name
                 ];
 
                 if (!$is_student_updated && $s_appl_form_num) {
@@ -280,6 +281,8 @@ class AuthController extends Controller
                     's_phone' => $u_phone,
                     's_id' => $student_inserted_id,
                     'role_id' => $role_name,
+                    'u_inst_code' => $user->u_inst_code ?? null,
+                    'district' => $user->u_inst_district ?? null,
                 ];
             }
 
@@ -298,8 +301,7 @@ class AuthController extends Controller
                 't_user_category' => null
             ]);
 
-            DB::table('jexpo_otp_tbl')
-                ->where('username', $u_phone)
+            Otp::where('username', $u_phone)
                 ->where('otp', $u_otp)
                 ->delete();
             $responseData = [

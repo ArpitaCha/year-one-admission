@@ -19,10 +19,16 @@ class JexpoApplElgbExam extends Model
             return new Board();
         });
     }
-    public function stateboard()
+    public function state()
     {
-        return $this->hasOne('App\Models\Board', "state_code", "exam_state_code")->withDefault(function () {
-            return new Board();
+        return $this->hasOne('App\Models\State', "state_id_pk", "exam_state_code")->withDefault(function () {
+            return new State();
+        });
+    }
+    public function district()
+    {
+        return $this->hasOne('App\Models\District', "district_id_pk", "exam_district")->withDefault(function () {
+            return new District();
         });
     }
 }

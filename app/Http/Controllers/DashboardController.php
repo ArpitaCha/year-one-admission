@@ -33,9 +33,7 @@ class DashboardController extends Controller
             $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
             if ($token_check) {  // check the token is expire or not
                 $user_id = $token_check->t_user_id;
-                //dd($user_id);
-                $user_data = SuperUser::select('u_id', 'u_role_id', 'u_inst_code', 'u_inst_name')->where('u_id', $user_id)->first();
-                //return $user_data;
+                $user_data = SuperUser::select('u_id', 'u_role_id', 'u_inst_code', 'u_inst_name', 'u_inst_district')->where('u_id', $user_id)->first();
                 $role_url_access_id = DB::table('jexpo_auth_roles_permissions')->where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
 
                 if (sizeof($role_url_access_id) > 0) {
@@ -43,11 +41,15 @@ class DashboardController extends Controller
                     $url_data = array_column($urls, 'url_name');
 
                     if (in_array('dashboard-count', $url_data)) {
+                        if ($user_data->u_role_id == 1) {
 
-                        $admissionCount = Student::where('s_admited_status', 1)->count();
+                            $admissionCount = Student::where('is_personal_save', 1)->count();
 
-                        $paymentCount = Student::where('s_admited_status', 1)->where('is_payment', 1)->count();
-
+                            $paymentCount = Student::where('is_personal_save', 1)->where('is_payment', 1)->count();
+                        } else {
+                            $admissionCount = Student::where('is_personal_save', 1)->where('s_home_district', $user_data->u_inst_district)->count();
+                            $paymentCount = Student::where('is_personal_save', 1)->where('s_home_district', $user_data->u_inst_district)->where('is_payment', 1)->count();
+                        }
 
                         $data = [
                             'admission_count' => $admissionCount,
