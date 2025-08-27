@@ -23,6 +23,7 @@ use App\Models\Student;
 use App\Models\SuperUser;
 use App\Models\AuditTrail;
 use App\Models\AuthPermission;
+use App\Models\VerifierStudentAssign;
 use App\Models\AuthUrl;
 use Illuminate\Support\Facades\Http;
 
@@ -37,7 +38,7 @@ class AdmissionController extends Controller
         try {
             $validated = Validator::make($request->all(), [
                 'student_first_name'   => ['required'],
-                'student_last_name'    => ['required'],
+                // 'student_last_name'    => ['required'],
                 'student_father_name'  => ['required'],
                 'student_mother_name'  => ['required'],
                 'student_guardian_name' => ['required'],
@@ -80,6 +81,7 @@ class AdmissionController extends Controller
                 'student_police_station' => 'required',
                 'student_post_office' => 'required',
                 'bank_details' => 'required',
+
 
 
 
@@ -314,7 +316,17 @@ class AdmissionController extends Controller
                         'message' => 'this document is mandatory'
                     ], 400);
                 }
-                // dd($certificate_number, $certificate_issue_date);
+                if ($request->hasFile('bank_passbook_document')) {
+                    $document = $request->file('bank_passbook_document');
+                    $documentName = $s_appl_form_num . '_bank_passbook_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_bank_passbook_document_path = 'uploads/' . $documentName;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'bank passbook document is mandatory.'
+                    ], 400);
+                }
 
                 $bank_details = json_decode($request->bank_details, true);
                 $middleName = trim($request->student_middle_name);
@@ -374,6 +386,7 @@ class AdmissionController extends Controller
                     's_block' => $request->student_block,
                     's_adhar_doc' => $student_aadhar_document_path,
                     's_bank_details' => json_encode($bank_details),
+                    's_bank_passbook_doc' => $student_bank_passbook_document_path
 
 
                 ]);
@@ -408,7 +421,7 @@ class AdmissionController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'student submitted successfully',
+                    'message' => 'Application submitted successfully',
                     'is_profile_updated' => $is_student_updated
 
                 ], 200);
@@ -422,337 +435,181 @@ class AdmissionController extends Controller
     }
     public function admissionList(Request $request)
     {
-        if ($request->header('token')) {
-            $now    =   date('Y-m-d H:i:s');
-            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
-            if ($token_check) {  // check the token is expire or not
-                $user_id = $token_check->t_user_id;
-                $user_data = SuperUser::where('u_id', $user_id)->first();
-                // dd($user_data);
-                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
-                // dd($role_url_access_id);
-
-                if (sizeof($role_url_access_id) > 0) {
-                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
-
-                    $url_data = array_column($urls, 'url_name');
-                    // dd($url_data);
-                    if (in_array('admission/admission-list', $url_data)) {
-                        if ($user_data->u_role_id == 1) {
-                            // COUNCIL: All students
-                            $students = Student::where('is_personal_save', 1)
-                                ->orderBy('s_id', 'desc')
-                                ->get();
-                        } elseif (
-                            ($user_data->u_role_id == 3) ||
-                            ($user_data->u_role_id == 4)
-                        ) {
-
-                            $students = Student::where('is_personal_save', 1)
-                                ->where('s_home_district', $user_data->u_inst_district)
-                                ->orderBy('s_id', 'desc')
-                                ->get();
-                        } else {
-                            $students = collect(); // empty collection
-                        }
-
-                        if ($students->isNotEmpty()) {
-                            $student_adm_list = $students->map(function ($data) {
-                                return [
-                                    'form_num'      => $data->s_appl_form_num,
-                                    'name'          => $data->s_candidate_name,
-                                    'guardian_name' => $data->s_guardian_name,
-                                    'phone_no'      => $data->s_phone,
-                                    'is_applied'    => (bool)$data->is_personal_save,
-                                    'is_paid'       => (bool)$data->is_payment,
-                                    'is_approved'   => (bool)$data->is_approved,
-                                    'is_reject'     => (bool)$data->is_reject,
-                                    'remarks'       => $data->s_remarks ?: '',
-                                    'overall_status' => (function () use ($data) {
-                                        if (!$data->is_personal_save) {
-                                            return 'Not Applied';
-                                        }
-
-                                        if ($data->is_personal_save && !$data->is_payment) {
-                                            return 'Applied but Not Paid';
-                                        }
-
-                                        if ($data->is_payment && !$data->is_approved && !$data->is_reject) {
-                                            return 'Paid but Not Approved';
-                                        }
-
-                                        if ($data->is_reject) {
-                                            return 'Rejected';
-                                        }
-
-                                        if ($data->is_approved) {
-                                            return 'Approved';
-                                        }
-
-                                        return 'Pending'; // fallback if no case matched
-                                    })(),
-                                ];
-                            });
-                        } else {
-                            $student_adm_list = collect();
-                        }
-                        return response()->json([
-                            'error'   => false,
-                            'message' => 'Data fetched successfully',
-                            'list'    => $student_adm_list
-                        ], 200);
-                    } else {
-                        return response()->json([
-                            'error'     =>  true,
-                            'message'   =>   "Oops! you don't have sufficient permission"
-                        ], 403);
-                    }
-                } else {
-                    return response()->json([
-                        'error'     =>  true,
-                        'message'   =>   "Oops! you don't have sufficient permission"
-                    ], 403);
-                }
-            } else {
-                return response()->json([
-                    'error'     =>  true,
-                    'message'   =>  'Unable to process your request due to invalid token'
-                ], 401);
-            }
+        $roleId = $request->auth_role_id ?? null;
+        $userData = $request->auth_user ?? null;
+        if ($roleId == 1) {
+            $students = Student::where('is_personal_save', 1)
+                ->orderBy('s_id', 'desc')
+                ->get();
+        } elseif (in_array($roleId, [3, 4])) {
+            $students = Student::where('is_personal_save', 1)
+                ->where('s_home_district', $userData->u_inst_district ?? null)
+                ->orderBy('s_id', 'desc')
+                ->get();
+        } else {
+            $students = collect(); // empty collection for other roles
         }
+
+        $student_adm_list = $students->map(function ($data) {
+            return [
+                'form_num'      => $data->s_appl_form_num,
+                'name'          => $data->s_candidate_name,
+                'guardian_name' => $data->s_guardian_name,
+                'phone_no'      => $data->s_phone,
+                'is_applied'    => (bool)$data->is_personal_save,
+                'is_paid'       => (bool)$data->is_payment,
+                'is_approved'   => (bool)$data->is_approved,
+                'is_reject'     => (bool)$data->is_reject,
+                'remarks'       => $data->s_remarks ?: '',
+                'overall_status' => (function () use ($data) {
+                    if (!$data->is_personal_save) return 'Not Applied';
+                    if ($data->is_personal_save && !$data->is_payment) return 'Applied but Not Paid';
+                    if ($data->is_payment && !$data->is_approved && !$data->is_reject) return 'Paid but Not Approved';
+                    if ($data->is_reject) return 'Rejected';
+                    if ($data->is_approved) return 'Approved';
+                    return 'Pending';
+                })(),
+            ];
+        });
+
+        return response()->json([
+            'error'   => false,
+            'message' => 'Data fetched successfully',
+            'list'    => $student_adm_list
+        ], 200);
     }
+
     public function approveCouncil(Request $request)
     {
-        if ($request->header('token')) {
-            $now    =   date('Y-m-d H:i:s');
-            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
-            if ($token_check) {  // check the token is expire or not
-                $user_id = $token_check->t_user_id;
-
-                $user_data = SuperUser::select('u_id', 'u_ref', 'u_role_id')->where('u_id', $user_id)->first();
-                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
-                // dd($role_url_access_id);
-
-                if (sizeof($role_url_access_id) > 0) {
-                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
-
-                    $url_data = array_column($urls, 'url_name');
-                    // dd($url_data);
-                    if (in_array('approve-council', $url_data)) {
-                        $form_num = $request->form_num;
-                        $remarks = $request->remarks;
-                        $status   = null;
-                        $message  = null;
-                        if ($request->is_approve) {
-                            $checked = Student::where('s_appl_form_num', $form_num)->where('is_personal_save', 1)->Update([
-                                'is_approved' => (bool)$request->is_approve,
-                                'is_reject'   => null,
-                                's_remarks'   => null
-                            ]);
-                            $message = "Admission Approved Successfully";
-                            $status = "APPROVED";
-                        } elseif ($request->is_reject) {
-                            $checked = Student::where('s_appl_form_num', $form_num)->where('is_personal_save', 1)->Update([
-                                'is_reject' => (bool)$request->is_reject,
-                                'is_approved'   => null,
-                                's_remarks' => $request->remarks
-                            ]);
-                            $status = "REJECTED";
-                            $message = "Admission rejected";
-                        }
-                        auditTrail($user_id, "$form_num, $status - Added successfully");
-                        return response()->json([
-                            'error' => false,
-                            'message' => $message
-                        ]);
-                    } else {
-                        return response()->json([
-                            'error'     =>  true,
-                            'message'   =>   "Oops! you don't have sufficient permission"
-                        ], 403);
-                    }
-                } else {
-                    return response()->json([
-                        'error'     =>  true,
-                        'message'   =>   "Oops! you don't have sufficient permission"
-                    ], 403);
-                }
-            } else {
-                return response()->json([
-                    'error'     =>  true,
-                    'message'   =>  'Unable to process your request due to invalid token'
-                ], 401);
-            }
+        $user_id = $request->auth_user_id ?? null;
+        $form_num = $request->form_num;
+        $remarks = $request->remarks;
+        $status   = null;
+        $message  = null;
+        if ($request->is_approve) {
+            $checked = Student::where('s_appl_form_num', $form_num)->where('is_personal_save', 1)->Update([
+                'is_approved' => (bool)$request->is_approve,
+                'is_reject'   => null,
+                's_remarks'   => null
+            ]);
+            $message = "Admission Approved Successfully";
+            $status = "APPROVED";
+        } elseif ($request->is_reject) {
+            $checked = Student::where('s_appl_form_num', $form_num)->where('is_personal_save', 1)->Update([
+                'is_reject' => (bool)$request->is_reject,
+                'is_approved'   => null,
+                's_remarks' => $request->remarks
+            ]);
+            $status = "REJECTED";
+            $message = "Admission rejected";
         }
+        auditTrail($user_id, "$form_num, $status - Added successfully");
+        return response()->json([
+            'error' => false,
+            'message' => $message
+        ]);
     }
     public function verifierList(Request $request)
     {
-        if ($request->header('token')) {
-            $now    =   date('Y-m-d H:i:s');
-            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
-            if ($token_check) {  // check the token is expire or not
-                $user_id = $token_check->t_user_id;
+        $roleId = $request->auth_role_id ?? null;
+        $userData = $request->auth_user ?? null;
 
-                $user_data = SuperUser::select('u_id', 'u_ref', 'u_role_id', 'u_inst_code', 'u_inst_district')->where('u_id', $user_id)->first();
-                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
-                // dd($role_url_access_id);
+        if ($roleId == 1) {
+            $list = SuperUser::whereNotIn('u_role_id', [1])->with('role')->get()->map(function ($data) {
+                return [
+                    'institute' => [
+                        'inst_code'   => $data->u_inst_code ?? '',
+                        'inst_name' => $data->u_inst_name ?? '',
+                    ],
+                    'phone_no' => $data->u_phone,
+                    'name' => $data->u_fullname,
+                    'email' => $data->u_email,
+                    'role'      => [
+                        'role_id'   => $data->u_role_id ?? '',
+                        'role_name' => optional($data->role)->role_name,
+                    ],
+                ];
+            });
+        } elseif ($roleId == 3) {
+            $list = SuperUser::where('u_role_id', 4)->where('u_inst_code', $userData->u_inst_code)->where('u_inst_district', $userData->u_inst_district)->with('role')->get()->map(function ($data) {
+                return [
+                    'institute' => [
+                        'inst_code'   => $data->u_inst_code ?? '',
+                        'inst_name' => $data->u_inst_name ?? '',
+                    ],
+                    'phone_no' => $data->u_phone,
+                    'name' => $data->u_fullname,
+                    'email' => $data->u_email,
+                    'username' => $data->u_username,
+                    'role'      => [
+                        'role_id'   => $data->u_role_id ?? '',
+                        'role_name' => optional($data->role)->role_name,
+                    ],
+                ];
+            });
+        }
+        if (sizeof($list) > 0) {
+            $reponse = array(
+                'error'     =>  false,
+                'message'   =>  'list found',
+                'count'     =>   sizeof($list),
+                'list'  =>   $list
+            );
+            return response(json_encode($reponse), 200);
+        } else {
+            $reponse = array(
+                'error'     =>  true,
+                'message'   =>  'No data available'
 
-                if (sizeof($role_url_access_id) > 0) {
-                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
-
-                    $url_data = array_column($urls, 'url_name');
-                    // dd($url_data);
-                    if (in_array('verifier-list', $url_data)) {
-                        if ($user_data->u_role_id == 1) {
-                            $list = SuperUser::whereNotIn('u_role_id', [1])->with('role')->get()->map(function ($data) {
-                                return [
-                                    'institute' => [
-                                        'inst_code'   => $data->u_inst_code ?? '',
-                                        'inst_name' => $data->u_inst_name ?? '',
-                                    ],
-                                    'phone_no' => $data->u_phone,
-                                    'name' => $data->u_fullname,
-                                    'email' => $data->u_email,
-                                    'role'      => [
-                                        'role_id'   => $data->u_role_id ?? '',
-                                        'role_name' => optional($data->role)->role_name,
-                                    ],
-                                ];
-                            });
-                        } elseif ($user_data->u_role_id == 3) {
-                            $list = SuperUser::where('u_role_id', 4)->where('u_inst_code', $user_data->u_inst_code)->where('u_inst_district', $user_data->u_inst_district)->with('role')->get()->map(function ($data) {
-                                return [
-                                    'institute' => [
-                                        'inst_code'   => $data->u_inst_code ?? '',
-                                        'inst_name' => $data->u_inst_name ?? '',
-                                    ],
-                                    'phone_no' => $data->u_phone,
-                                    'name' => $data->u_fullname,
-                                    'email' => $data->u_email,
-                                    'username' => $data->u_username,
-                                    'role'      => [
-                                        'role_id'   => $data->u_role_id ?? '',
-                                        'role_name' => optional($data->role)->role_name,
-                                    ],
-                                ];
-                            });
-                        }
-                        if (sizeof($list) > 0) {
-                            $reponse = array(
-                                'error'     =>  false,
-                                'message'   =>  'list found',
-                                'count'     =>   sizeof($list),
-                                'list'  =>   $list
-                            );
-                            return response(json_encode($reponse), 200);
-                        } else {
-                            $reponse = array(
-                                'error'     =>  true,
-                                'message'   =>  'No data available'
-
-                            );
-                            return response(json_encode($reponse), 200);
-                        }
-                    } else {
-                        return response()->json([
-                            'error'     =>  true,
-                            'message'   =>   "Oops! you don't have sufficient permission"
-                        ], 403);
-                    }
-                } else {
-                    return response()->json([
-                        'error'     =>  true,
-                        'message'   =>   "Oops! you don't have sufficient permission"
-                    ], 403);
-                }
-            } else {
-                return response()->json([
-                    'error'     =>  true,
-                    'message'   =>  'Unable to process your request due to invalid token'
-                ], 401);
-            }
+            );
+            return response(json_encode($reponse), 200);
         }
     }
     public function addVerifier(Request $request)
     {
-        if ($request->header('token')) {
-            $now    =   date('Y-m-d H:i:s');
-            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
-            if ($token_check) {  // check the token is expire or not
-                $user_id = $token_check->t_user_id;
+        $validated = Validator::make($request->all(), [
+            'phone_no' => 'required',
+            'name' => 'required',
+            'email' => 'required|email',
+            'inst_code' => 'required',
+            'role_id' => 'required',
+        ]);
+        if ($validated->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validated->errors()->first()
+            ], 422);
+        }
+        $inst_name = Institute::where('i_code', $request->inst_code)->value('i_name');
 
-                $user_data = SuperUser::select('u_id', 'u_ref', 'u_role_id')->where('u_id', $user_id)->first();
-                $role_url_access_id = AuthPermission::where('rp_role_id', $user_data->u_role_id)->pluck('rp_url_id');
-                // dd($role_url_access_id);
+        $create_user = SuperUser::updateOrCreate(
+            ['u_phone' => $request->phone_no],
+            [
+                'u_fullname'  => $request->name,
+                'u_email'     => $request->email,
+                'u_username'  => $request->username,
+                'u_inst_name' =>  $inst_name,
+                'u_inst_code' => $request->inst_code,
+                'u_role_id'   => $request->role_id,
+                'u_inst_district'    => $request->district
+            ]
+        );
 
-                if (sizeof($role_url_access_id) > 0) {
-                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
+        if ($create_user) {
+            $message = $create_user->wasRecentlyCreated
+                ? 'User created successfully'
+                : 'User updated successfully';
 
-                    $url_data = array_column($urls, 'url_name');
-                    // dd($url_data);
-                    if (in_array('add-verifier', $url_data)) {
-                        $validated = Validator::make($request->all(), [
-                            'phone_no' => 'required',
-                            'name' => 'required',
-                            'email' => 'required|email',
-                            'inst_code' => 'required',
-                            'role_id' => 'required',
-                        ]);
-                        if ($validated->fails()) {
-                            return response()->json([
-                                'error' => true,
-                                'message' => $validated->errors()->first()
-                            ], 422);
-                        }
-                        $inst_name = Institute::where('i_code', $request->inst_code)->value('i_name');
-
-                        $create_user = SuperUser::updateOrCreate(
-                            ['u_phone' => $request->phone_no],
-                            [
-                                'u_fullname'  => $request->name,
-                                'u_email'     => $request->email,
-                                'u_username'  => $request->username,
-                                'u_inst_name' =>  $inst_name,
-                                'u_inst_code' => $request->inst_code,
-                                'u_role_id'   => $request->role_id,
-                                'u_inst_district'    => $request->district
-                            ]
-                        );
-
-                        if ($create_user) {
-                            $message = $create_user->wasRecentlyCreated
-                                ? 'User created successfully'
-                                : 'User updated successfully';
-
-                            return response()->json([
-                                'error'   => false,
-                                'message' => $message,
-                                'data'    => $create_user
-                            ]);
-                        } else {
-                            return response()->json([
-                                'error'   => true,
-                                'message' => 'Failed to create or update user'
-                            ]);
-                        }
-                    } else {
-                        return response()->json([
-                            'error'     =>  true,
-                            'message'   =>   "Oops! you don't have sufficient permission"
-                        ], 403);
-                    }
-                } else {
-                    return response()->json([
-                        'error'     =>  true,
-                        'message'   =>   "Oops! you don't have sufficient permission"
-                    ], 403);
-                }
-            } else {
-                return response()->json([
-                    'error'     =>  true,
-                    'message'   =>  'Unable to process your request due to invalid token'
-                ], 401);
-            }
+            return response()->json([
+                'error'   => false,
+                'message' => $message,
+                'data'    => $create_user
+            ]);
+        } else {
+            return response()->json([
+                'error'   => true,
+                'message' => 'Failed to create or update user'
+            ]);
         }
     }
     public function checkValidationFields(Request $request, $role)
@@ -806,6 +663,121 @@ class AdmissionController extends Controller
             ]);
         }
 
-        return response()->json(['error' => 'Invalid IFSC code'], 400);
+        return response()->json(['error' => 'Invalid IFS code'], 400);
+    }
+    public function districtWiseVerifier(Request $request)
+    {
+        $district_id = $request->district_id;
+        $today = now();
+        $verifier_list = SuperUser::with(['verifierstudentassign' => function ($query) use ($district_id) {
+            $query->where('dist_id', $district_id);
+        }])
+            ->select('u_id', 'u_fullname')
+            ->where('u_role_id', 3)
+            ->where('u_inst_district', $district_id)
+            ->get()
+            ->map(function ($verifier) {
+                return [
+                    'verifier_id'   => $verifier->u_id,
+                    'verifier_name' => $verifier->u_fullname,
+                    'student_count' => $verifier->verifierstudentassign->student_no ?? 0,
+                ];
+            });
+        $count = $verifier_list->count();
+        $student_list = JexpoApplElgbExam::where('exam_district', $district_id)->get()->count();
+        $students = Student::whereIn(
+            's_appl_form_num',
+            JexpoApplElgbExam::where('exam_district', $district_id)->pluck('exam_appl_form_num')
+        )->where('is_assign', 1)->get();
+        $assign_student_list = $students->count();
+        $left_student_list = $student_list - $assign_student_list;
+
+
+        return response()->json([
+            'error' => false,
+            'distribution' => $verifier_list,
+            'count' => $count,
+            'student_count' => $student_list,
+            'assigned_student_count' => $assign_student_list,
+            'left_student_count' => $left_student_list
+        ]);
+    }
+    public function districtWiseAssign(Request $request)
+    {
+        $districtId = $request->district_id;
+        $examFormNos = JexpoApplElgbExam::where('exam_district', $districtId)
+            ->pluck('exam_appl_form_num');
+
+        if ($examFormNos->isEmpty()) {
+            return response()->json(['message' => 'No students found in Jexpo'], 404);
+        }
+        $students = Student::whereIn('s_appl_form_num', $examFormNos)
+            ->where('is_assign', 0)
+            ->pluck('s_appl_form_num');
+
+        if ($students->isEmpty()) {
+            return response()->json(['message' => 'No unassigned students found'], 404);
+        }
+        $verifiers = SuperUser::where('u_role_id', 3)
+            ->where('u_inst_district', $districtId)
+            ->get(['u_id', 'u_fullname', 'u_inst_code']);
+
+        if ($verifiers->isEmpty()) {
+            return response()->json(['message' => 'No verifiers found'], 404);
+        }
+        $totalStudents   = $students->count();
+        $totalVerifiers  = $verifiers->count();
+
+        $perVerifier = intdiv($totalStudents, $totalVerifiers);
+
+        $extra       = $totalStudents % $totalVerifiers;
+        $assignments   = [];
+        $distribution  = [];
+        $studentIndex  = 0;
+
+        foreach ($verifiers as $index => $verifier) {
+            $count = $perVerifier + ($index < $extra ? 1 : 0);
+            $assignedStudents = $students->slice($studentIndex, $count);
+
+            if ($assignedStudents->isEmpty()) {
+                continue;
+            }
+            $existing = VerifierStudentAssign::where('head_verifier_id', $verifier->u_id)
+                ->where('dist_id', $districtId)
+                ->first();
+
+            if ($existing) {
+                $existing->student_no += $assignedStudents->count();
+                $existing->updated_at = now();
+                $existing->save();
+            } else {
+                VerifierStudentAssign::create([
+                    'head_verifier_id'   => $verifier->u_id,
+                    'head_verifier_name' => $verifier->u_fullname,
+                    'dist_id'            => $districtId,
+                    'inst_code'          => $verifier->u_inst_code,
+                    'student_no'         => $assignedStudents->count(),
+                    'created_at'         => now(),
+                    'updated_at'         => now(),
+                ]);
+            }
+            Student::whereIn('s_appl_form_num', $assignedStudents)
+                ->update(['is_assign' => 1]);
+
+            $distribution[] = (object)[
+                'verifier_id'   => $verifier->u_id,
+                'verifier_name' => $verifier->u_fullname,
+                'student_count' => $assignedStudents->count(),
+            ];
+
+            $studentIndex += $count;
+        }
+        return response()->json([
+            'message'         => 'Students distributed successfully',
+            'total_students'  => $totalStudents,
+            'total_verifiers' => $totalVerifiers,
+            'distribution'    => $distribution,
+            'inserted_count'  => count($assignments),
+        ]);
     }
 }

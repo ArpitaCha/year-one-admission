@@ -98,25 +98,33 @@ class StudentController extends Controller
             $student_sign_url = $check_student->s_sign
                 ? URL::to("storage/{$check_student->s_sign}")
                 : null;
-            $student_llq_url = $check_student->s_llq_doc
+            $student_llq_url = ($check_student->s_llq == 1 && $check_student->s_llq_doc)
                 ? URL::to("storage/{$check_student->s_llq_doc}")
                 : null;
 
-            $student_tfw_url = $check_student->s_tfw_doc
+            $student_tfw_url = ($check_student->s_tfw == 1 && $check_student->s_tfw_doc)
                 ? URL::to("storage/{$check_student->s_tfw_doc}")
                 : null;
-            $student_ews_url = $check_student->s_ews_doc
+
+            $student_ews_url = ($check_student->s_ews == 1 && $check_student->s_ews_doc)
                 ? URL::to("storage/{$check_student->s_ews_doc}")
                 : null;
-            $student_pwd_url = $check_student->s_pwd_doc
+
+            $student_pwd_url = ($check_student->s_pwd == 1 && $check_student->s_pwd_doc)
                 ? URL::to("storage/{$check_student->s_pwd_doc}")
                 : null;
-            $student_exsm_url = $check_student->s_exsm_doc
+
+            $student_exsm_url = ($check_student->s_exsm == 1 && $check_student->s_exsm_doc)
                 ? URL::to("storage/{$check_student->s_exsm_doc}")
                 : null;
-            $student_caste_url = $check_student->s_caste_doc
+
+            // caste doc only if caste is not general
+            $student_caste_url = (!empty($check_student->s_caste)
+                && strtolower($check_student->s_caste) !== 'general'
+                && $check_student->s_caste_doc)
                 ? URL::to("storage/{$check_student->s_caste_doc}")
                 : null;
+
             $student_age_url = $check_student->s_age_doc
                 ? URL::to("storage/{$check_student->s_age_doc}")
                 : null;
@@ -126,6 +134,9 @@ class StudentController extends Controller
 
             $student_adhar_url = $check_student->s_adhar_doc
                 ? URL::to("storage/{$check_student->s_adhar_doc}")
+                : null;
+            $student_bank_passbook_url = $check_student->s_bank_passbook_doc
+                ? URL::to("storage/{$check_student->s_bank_passbook_doc}")
                 : null;
             $message = "Data fetched successfully";
             $data = [
@@ -196,6 +207,7 @@ class StudentController extends Controller
                 'student_exsm_doc'  => $student_exsm_url,
                 'student_ews_doc'   => $student_ews_url,
                 'student_age_doc'   => $student_age_url,
+                'student_bank_passbook_doc'   => $student_bank_passbook_url,
                 'student_marksheet_doc'   => $student_marksheet_url,
                 'session_year' => $check_student->session_year,
                 'is_paid' => (bool)$check_student->is_payment,
@@ -203,20 +215,29 @@ class StudentController extends Controller
                 'is_approved' => (bool)$check_student->is_approved,
                 'is_reject' => (bool)$check_student->is_reject,
                 'rejected_remarks' => $check_student->s_remarks ?? null,
-                'student_cast_cert_number' =>  $check_student->cast_cert_number,
-                'student_ews_cert_date' => $check_student->ews_cert_date,
-                'student_pwd_cert_number' =>  $check_student->pc_cert_no,
-                'student_pwd_cert_date' =>  $check_student->pc_cert_date,
-                'student_ews_cert_number' =>  $check_student->ews_cert_number,
-                'student_cast_cert_date' => $check_student->cast_cert_date,
-                'student_ews_valid_year' => $check_student->ews_valid_year,
-                'student_cast_sub_category' => $check_student->cast_sub_category ?? '',
+                'student_cast_cert_number' => (!empty($check_student->s_caste) && strtolower($check_student->s_caste) !== 'general')
+                    ? $check_student->cast_cert_number
+                    : null,
+
+                'student_cast_cert_date' => (!empty($check_student->s_caste) && strtolower($check_student->s_caste) !== 'general')
+                    ? $check_student->cast_cert_date
+                    : null,
+
+                'student_cast_sub_category' => (!empty($check_student->s_caste) && strtolower($check_student->s_caste) !== 'general')
+                    ? ($check_student->cast_sub_category ?? '')
+                    : null,
+                'student_ews_cert_number' => ($check_student->s_ews == 1) ? $check_student->ews_cert_number : null,
+                'student_ews_cert_date'   => ($check_student->s_ews == 1) ? $check_student->ews_cert_date : null,
+                'student_ews_valid_year'  => ($check_student->s_ews == 1) ? $check_student->ews_valid_year : null,
+
+                'student_pwd_cert_number' => ($check_student->s_pwd == 1) ? $check_student->pc_cert_no : null,
+                'student_pwd_cert_date'   => ($check_student->s_pwd == 1) ? $check_student->pc_cert_date : null,
                 'student_bank_details' => $check_student->s_bank_details ? json_decode($check_student->s_bank_details, true) : null,
 
                 'exam_board'       => [
                     'exam_state_code' =>  $qualification->board->state_code ?? '',
                     'exam_board_code' =>  $qualification->exam_board ?? '',
-                    'exam_board_name' =>  $qualification->board->board_name ?? '',
+                    'exam_board_name' => strtoupper($qualification->board->board_name ?? ''),
 
                 ],
 
@@ -233,7 +254,7 @@ class StudentController extends Controller
                 'exam_pass_yr'     => $qualification->exam_pass_yr,
                 'exam_tot_marks'   => $qualification->exam_tot_marks,
                 'exam_ob_marks'    => $qualification->exam_ob_marks,
-                'exam_elgb_code'   => $qualification->exam_elgb_code,
+                'exam_elgb_code'   => strtoupper($qualification->exam_elgb_code),
                 'exam_marks_type'  => $qualification->exam_marks_type,
                 'exam_per_marks'   => $qualification->exam_per_marks ? json_decode($qualification->exam_per_marks, true) : null,
 
@@ -255,469 +276,446 @@ class StudentController extends Controller
 
     public function studentInfoUpdate(Request $request)
     {
-        if ($request->header('token')) {
-            $now    =   date('Y-m-d H:i:s');
-            $token_check = Token::where('t_token', '=', $request->header('token'))->where('t_expired_on', '>=', $now)->first();
-            if ($token_check) {
-                $user_id = $token_check->t_user_id;
-                $user_data = Student::where('s_id', $user_id)->first();
-                if ($user_data) {
-                    $user_role_id = $user_data->u_role_id;
-                } else {
-                    $admin_user = SuperUser::where('u_id', $user_id)->first();
-                    $user_role_id = $admin_user->u_role_id;
-                }
-                $role_url_access_id = AuthPermission::where('rp_role_id', $user_role_id)->pluck('rp_url_id');
-                if (sizeof($role_url_access_id) > 0) {
-                    $urls = AuthUrl::where('url_visible', 1)->whereIn('url_id', $role_url_access_id)->get()->toArray();
-                    $url_data = array_column($urls, 'url_name');
-                    if (in_array('student-update', $url_data)) {
-                        $validator = Validator::make($request->all(), [
-                            'student_first_name'   => ['required'],
-                            'student_last_name'    => ['required'],
-                            'student_father_name'  => ['required'],
-                            'student_mother_name'  => ['required'],
-                            'student_guardian_name' => ['required'],
-                            'student_dob'          => ['required'],
-                            'student_aadhar_no'    => ['required', 'unique:jexpo_register_student,s_aadhar_no'],
-                            'student_email'        => ['required', 'email'],
-                            'student_gender'       => ['required'],
-                            'student_religion'     => ['required'],
-                            'student_caste'        => ['required'],
-                            'student_citizenship'  => ['required'],
-                            'student_subdivision'  => ['nullable'],
-                            'is_pwd'                => ['required'],
-                            'student_photo'        => ['required'],
-                            'student_sign'         => ['required'],
-                            'student_home_dist'    => ['required'],
-                            'student_state_id'     => ['required'],
-                            'student_address'      => ['required'],
-                            'student_pin_no'       => ['required'],
-                            'is_married'           => ['required'],
-                            'student_phone' => 'required',
-                            'is_tfw'           => ['required'],
-                            'is_llq'           => ['required'],
-                            'is_exsm'           => ['required'],
-                            'is_ews'           => ['required'],
-                            'student_aadhar_document' => ['required'],
-                            'student_block' => ['nullable'],
-                            'exam_board' => 'required',
-                            'exam_pass_yr' => 'required',
-                            'exam_total_marks' => 'required',
-                            'obtained_marks' => 'required',
-                            'exam_elgb_code' => 'required',
-                            'exam_school_name' => 'required',
-                            'exam_marks' => 'required',
-                            'exam_state' => 'required',
-                            'exam_district' => 'required',
-                            'student_appl_form_num' => 'required',
-                            'student_police_station' => 'required',
-                            'student_post_office' => 'required',
-                            'student_age_proof_document' => ['required'],
-                            'student_marksheet_document' => ['required'],
-                            // 'bank_details' => 'required',
-                        ]);
 
-                        if ($validator->fails()) {
-                            return response()->json([
-                                'error' => true,
-                                'message' => $validator->messages()
-                            ], 422);
-                        }
+        $validator = Validator::make($request->all(), [
+            'student_first_name'   => ['required'],
+            // 'student_last_name'    => ['required'],
+            'student_father_name'  => ['required'],
+            'student_mother_name'  => ['required'],
+            'student_guardian_name' => ['required'],
+            'student_dob'          => ['required'],
+            'student_aadhar_no'    => ['required', 'unique:jexpo_register_student,s_aadhar_no'],
+            'student_email'        => ['required', 'email'],
+            'student_gender'       => ['required'],
+            'student_religion'     => ['required'],
+            'student_caste'        => ['required'],
+            'student_citizenship'  => ['required'],
+            'student_subdivision'  => ['nullable'],
+            'is_pwd'                => ['required'],
+            'student_photo'        => ['required'],
+            'student_sign'         => ['required'],
+            'student_home_dist'    => ['required'],
+            'student_state_id'     => ['required'],
+            'student_address'      => ['required'],
+            'student_pin_no'       => ['required'],
+            'is_married'           => ['required'],
+            'student_phone' => 'required',
+            'is_tfw'           => ['required'],
+            'is_llq'           => ['required'],
+            'is_exsm'           => ['required'],
+            'is_ews'           => ['required'],
+            'student_aadhar_document' => ['required'],
+            'student_block' => ['nullable'],
+            'exam_board' => 'required',
+            'exam_pass_yr' => 'required',
+            'exam_total_marks' => 'required',
+            'obtained_marks' => 'required',
+            'exam_elgb_code' => 'required',
+            'exam_school_name' => 'required',
+            'exam_marks' => 'required',
+            'exam_state' => 'required',
+            'exam_district' => 'required',
+            'student_appl_form_num' => 'required',
+            'student_police_station' => 'required',
+            'student_post_office' => 'required',
+            'student_age_proof_document' => ['required'],
+            'student_marksheet_document' => ['required'],
+            // 'bank_details' => 'required',
+        ]);
 
-                        try {
-                            $now = now();
-                            $form_num = $request->student_appl_form_num;
-                            $student = Student::where('s_appl_form_num', $form_num)->where('is_active', 1)->first();
-                            $profile_save = (bool)$student->is_personal_save;
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->messages()
+            ], 422);
+        }
 
-                            if (!$student) {
-                                return response()->json([
-                                    'error' => true,
-                                    'message' => 'Student not found with this application number.'
-                                ], 404);
-                            }
+        try {
+            $now = now();
+            $form_num = $request->student_appl_form_num;
+            $student = Student::where('s_appl_form_num', $form_num)->where('is_active', 1)->first();
+            $profile_save = (bool)$student->is_personal_save;
 
-                            // Age validation
-                            $currentYear = date('Y');
-                            $currentTime = time();
-                            $cutoffYear = $currentYear - 17;
-                            $cutoffDate = strtotime("$cutoffYear-07-01");
-                            $studentDob = strtotime($request->student_dob);
-                            $examTotalMarks = (int) $request->exam_total_marks;
-                            $obtainedMarks = (int) $request->obtained_marks;
-                            if ($obtainedMarks > $examTotalMarks) {
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'Obtained marks cannot be greater than total marks.'
-                                ], 400);
-                            }
+            if (!$student) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Student not found with this application number.'
+                ], 404);
+            }
+
+            // Age validation
+            $currentYear = date('Y');
+            $currentTime = time();
+            $cutoffYear = $currentYear - 17;
+            $cutoffDate = strtotime("$cutoffYear-07-01");
+            $studentDob = strtotime($request->student_dob);
+            $examTotalMarks = (int) $request->exam_total_marks;
+            $obtainedMarks = (int) $request->obtained_marks;
+            if ($obtainedMarks > $examTotalMarks) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Obtained marks cannot be greater than total marks.'
+                ], 400);
+            }
 
 
-                            if ($studentDob > $cutoffDate) {
-                                return response()->json([
-                                    'error' => true,
-                                    'message' => "Candidate must complete 17 years on or before July 1st, $cutoffYear."
-                                ], 400);
-                            }
+            if ($studentDob > $cutoffDate) {
+                return response()->json([
+                    'error' => true,
+                    'message' => "Candidate must complete 17 years on or before July 1st, $cutoffYear."
+                ], 400);
+            }
 
 
 
-                            $student_photo = $student->s_photo; // default to existing
+            $student_photo = $student->s_photo; // default to existing
 
-                            if ($request->hasFile('student_photo') && $request->file('student_photo')->isValid()) {
-                                // Unlink old photo if exists
-                                if (!empty($student->s_photo)) {
-                                    $oldPhotoPath = storage_path('app/public/' . $student->s_photo);
-                                    if (file_exists($oldPhotoPath)) {
-                                        unlink($oldPhotoPath);
-                                    }
-                                }
-
-                                $image = $request->file('student_photo');
-                                $imageName = $form_num . '_image_' . $currentTime . '.' . $image->getClientOriginalExtension();
-                                $imagePath = 'uploads/' . $imageName;
-                                $image->storeAs('uploads/', $imageName, 'public');
-
-                                $student_photo = $imagePath;
-                            }
-
-                            // SIGNATURE
-                            $student_sign = $student->s_sign; // default to existing
-
-                            if ($request->hasFile('student_sign') && $request->file('student_sign')->isValid()) {
-                                // Unlink old signature if exists
-                                if (!empty($student->s_sign)) {
-                                    $oldSignPath = storage_path('app/public/' . $student->s_sign);
-                                    if (file_exists($oldSignPath)) {
-                                        unlink($oldSignPath);
-                                    }
-                                }
-
-                                $signature = $request->file('student_sign');
-                                $signatureName = $form_num . '_sign_' . $currentTime . '.' . $signature->getClientOriginalExtension();
-                                $signaturePath = 'uploads/' . $signatureName;
-                                $signature->storeAs('uploads/', $signatureName, 'public');
-
-                                $student_sign = $signaturePath;
-                            }
-
-
-                            $student_tfw_document_path = null;
-                            if ($request->is_tfw === '1') {
-                                if ($request->hasFile('student_tfw_document') && $request->file('student_tfw_document')->isValid()) {
-                                    $document = $request->file('student_tfw_document');
-                                    $documentName = $form_num . '_tfw_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_tfw_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_tfw_document)) {
-                                    $student_tfw_document_path =  $student->s_tfw_doc  ? $student->s_tfw_doc
-                                        : null;
-                                } else {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'TFW document is mandatory when TFW is selected.'
-                                    ], 400);
-                                }
-                            }
-                            if ($request->is_pwd === '1') {
-                                if ($request->hasFile('student_pwd_document') && $request->file('student_pwd_document')->isValid()) {
-                                    $document = $request->file('student_pwd_document');
-                                    $documentName = $form_num . '_pwd_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_pwd_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_pwd_document)) {
-                                    $student_pwd_document_path = $student->s_pwd_doc ?? null;
-                                }
-                                $pwd_certificate_number = trim($request->pc_cert_no ?? '') !== ''
-                                    ? $request->pc_cert_no
-                                    : ($student->pc_cert_no ?? null);
-
-                                $pwd_certificate_issue_date = trim($request->pc_cert_date ?? '') !== ''
-                                    ? $request->pc_cert_date
-                                    : ($student->pc_cert_date ?? null);
-                                if (empty($student_pwd_document_path) || empty($pwd_certificate_number) || empty($pwd_certificate_issue_date)) {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'PWD certificate number, issue date, and document are required when PWD is selected.'
-                                    ], 400);
-                                }
-                            } else {
-                                $student_pwd_document_path = null;
-                                $pwd_certificate_number = '';
-                                $pwd_certificate_issue_date = '';
-                            }
-                            $student_llq_document_path = null;
-                            if ($request->is_llq === '1') {
-                                if ($request->hasFile('student_llq_document') && $request->file('student_llq_document')->isValid()) {
-                                    $document = $request->file('student_llq_document');
-                                    $documentName = $form_num . '_llq_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_llq_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_llq_document)) {
-                                    $student_llq_document_path =  $student->s_llq_doc  ? $student->s_llq_doc : null;
-                                } else {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'LLQ document is mandatory when LLQ is selected.'
-                                    ], 400);
-                                }
-                            }
-                            $student_exsm_document_path = null;
-                            if ($request->is_exsm === '1') {
-                                if ($request->hasFile('student_exsm_document') && $request->file('student_exsm_document')->isValid()) {
-                                    $document = $request->file('student_exsm_document');
-                                    $documentName = $form_num . '_exsm_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_exsm_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_exsm_document)) {
-                                    $student_exsm_document_path =  $student->s_exsm_doc  ? $student->s_exsm_doc : null;
-                                } else {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'EXSM document is mandatory when EXSM is selected.'
-                                    ], 400);
-                                }
-                            }
-                            $student_caste_document_path = $student->s_caste_doc;
-                            $certificate_number = null;
-                            $certificate_issue_date = null;
-                            $sub_caste_category = null;
-                            if (strtoupper(trim($request->student_caste)) !== 'GENERAL') {
-                                if ($request->hasFile('student_caste_document') && $request->file('student_caste_document')->isValid()) {
-                                    $document = $request->file('student_caste_document');
-                                    $documentName = $form_num . '_caste_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_caste_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_caste_document)) {
-                                    $student_caste_document_path =  $student->s_caste_doc  ? $student->s_caste_doc
-                                        : null;
-                                } else {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'Caste certificate is mandatory when caste is not GENERAL.'
-                                    ], 400);
-                                }
-                                $certificate_number = $request->cert_number;
-                                $sub_caste_category = $request->sub_caste_category;
-                                $certificate_issue_date = $request->cert_issue_date;
-                            }
-
-                            if ($request->is_ews === '1') {
-                                if ($request->hasFile('student_ews_document') && $request->file('student_ews_document')->isValid()) {
-                                    $document = $request->file('student_ews_document');
-                                    $documentName = $form_num . '_ews_document.' . $document->getClientOriginalExtension();
-                                    $document->storeAs('uploads/', $documentName, 'public');
-                                    $student_ews_document_path = 'uploads/' . $documentName;
-                                } elseif (is_string($request->student_ews_document)) {
-                                    $student_ews_document_path = $student->s_ews_doc ?? null;
-                                }
-                                $ews_certificate_number = trim($request->ews_cert_number ?? '') !== ''
-                                    ? $request->ews_cert_number
-                                    : ($student->ews_cert_number ?? null);
-
-                                $ews_certificate_issue_date = trim($request->ews_cert_date ?? '') !== ''
-                                    ? $request->ews_cert_date
-                                    : ($student->ews_cert_date ?? null);
-                                $ews_valid_year = trim($request->ews_valid_year ?? '') !== ''
-                                    ? $request->ews_valid_year
-                                    : ($student->ews_valid_year ?? null);
-                                if (empty($student_ews_document_path) || empty($ews_certificate_number) || empty($ews_certificate_issue_date) || empty($ews_valid_year)) {
-                                    return response()->json([
-                                        'success' => false,
-                                        'message' => 'EWS certificate number, valid year, issue date, and document are required when EWS is selected.'
-                                    ], 400);
-                                }
-                            } else {
-                                // EWS is not selected, so clear values
-                                $student_ews_document_path = null;
-                                $ews_certificate_number = '';
-                                $ews_certificate_issue_date = '';
-                                $ews_valid_year = '';
-                            }
-
-
-                            if ($request->hasFile('student_aadhar_document') && $request->file('student_aadhar_document')->isValid()) {
-                                $document = $request->file('student_aadhar_document');
-                                $documentName = $form_num . '_aadhar_document.' . $document->getClientOriginalExtension();
-                                $document->storeAs('uploads/', $documentName, 'public');
-                                $student_aadhar_document_path = 'uploads/' . $documentName;
-                            } elseif (is_string($request->student_aadhar_document)) {
-                                $student_aadhar_document_path =  $student->s_adhar_doc  ? $student->s_adhar_doc : null;
-                            } else {
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'adhar document is mandatory '
-                                ], 400);
-                            }
-                            if ($request->hasFile('student_age_proof_document')) {
-                                $document = $request->file('student_age_proof_document');
-                                $documentName = $form_num . '_age_proof_document.' . $document->getClientOriginalExtension();
-                                $document->storeAs('uploads/', $documentName, 'public');
-                                $student_age_proof_document_path = 'uploads/' . $documentName;
-                            } elseif (is_string($request->student_age_proof_document)) {
-                                $student_age_proof_document_path = $student->s_age_doc  ?  $student->s_age_doc
-                                    : null;
-                            } else {
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'this document is mandatory'
-                                ], 400);
-                            }
-                            if ($request->hasFile('student_marksheet_document')) {
-                                $document = $request->file('student_marksheet_document');
-                                $documentName = $form_num . '_marksheet_document.' . $document->getClientOriginalExtension();
-                                $document->storeAs('uploads/', $documentName, 'public');
-                                $student_marksheet_document_path = 'uploads/' . $documentName;
-                            } elseif (is_string($request->student_marksheet_document)) {
-                                $student_marksheet_document_path = $student->s_marksheet_doc  ?  $student->s_marksheet_doc
-                                    : null;
-                            } else {
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'this document is mandatory'
-                                ], 400);
-                            }
-                            //
-                            $enc_aadhaar_num = encryptHEXFormat($request->student_aadhar_no);
-
-                            DB::beginTransaction();
-                            $bank_details = json_decode($request->bank_details, true);
-                            // dd($certificate_number);
-                            $student->update([
-                                's_first_name'        => trim($request->student_first_name),
-                                's_middle_name'       => trim($request->student_middle_name),
-                                's_last_name'         => trim($request->student_last_name),
-                                's_candidate_name'    => trim($request->student_first_name)
-                                    . (
-                                        (isset($request->student_middle_name) &&
-                                            !empty(trim($request->student_middle_name)) &&
-                                            strtolower(trim($request->student_middle_name)) !== 'null')
-                                        ? ' ' . trim($request->student_middle_name)
-                                        : ''
-                                    )
-                                    . ' ' . trim($request->student_last_name),
-                                's_father_name'       => trim($request->student_father_name),
-                                's_mother_name'       => trim($request->student_mother_name),
-                                's_dob'               => $request->student_dob,
-                                's_aadhar_no'         => $enc_aadhaar_num,
-                                's_email'             => trim($request->student_email),
-                                's_gender'            => $request->student_gender,
-                                's_religion'          => $request->student_religion,
-                                's_caste'             => $request->student_caste,
-                                's_subdivision' => (
-                                    isset($request->student_subdivision) &&
-                                    trim(strtolower($request->student_subdivision)) !== '' &&
-                                    trim(strtolower($request->student_subdivision)) !== 'null'
-                                ) ? $request->student_subdivision : null,
-                                's_address2'          => $request->student_address2,
-                                's_pwd'               => $request->is_pwd,
-                                's_photo'             => $student_photo,
-                                's_sign'              => $student_sign,
-                                's_guardian_name'     => $request->student_guardian_name,
-                                's_citizenship'       => $request->student_citizenship,
-                                's_pin_no'            => $request->student_pin_no,
-                                's_police_station'         => $request->student_police_station,
-                                's_post_office'         => $request->student_post_office,
-                                's_home_district'     => trim($request->student_home_dist),
-                                's_state_id'          => $request->student_state_id,
-                                's_address'           => trim($request->student_address),
-                                's_trade_code'        => $request->trade_code,
-                                'is_married'          => $request->is_married,
-                                's_kanyashree'        => $request->student_kanyashree_no,
-                                's_tfw'     => $request->is_tfw,
-                                's_ews'     => $request->is_ews,
-                                's_llq'     => $request->is_llq,
-                                's_exsm'    => $request->is_exsm,
-                                's_caste_doc' => $student_caste_document_path,
-                                's_pwd_doc'   => $student_pwd_document_path,
-                                's_tfw_doc'   => $student_tfw_document_path,
-                                's_llq_doc'   => $student_llq_document_path,
-                                's_exsm_doc'  => $student_exsm_document_path,
-                                's_ews_doc'   => $student_ews_document_path,
-                                's_age_doc'   => $student_age_proof_document_path,
-                                's_marksheet_doc' => $student_marksheet_document_path,
-                                'cast_cert_number' =>  $certificate_number,
-                                'cast_cert_date' =>  $certificate_issue_date,
-                                'cast_sub_category' => $sub_caste_category,
-                                's_block' => $request->student_block,
-                                's_adhar_doc' => $student_aadhar_document_path,
-                                's_bank_details' => json_encode($bank_details),
-                                'ews_cert_number' => $ews_certificate_number,
-                                'ews_cert_date' => $ews_certificate_issue_date,
-                                'ews_valid_year' => $ews_valid_year,
-                                'pc_cert_no' => $pwd_certificate_number,
-                                'pc_cert_date' => $pwd_certificate_issue_date,
-
-
-
-                            ]);
-
-
-                            $exam_per_marks = json_decode($request->exam_marks, true); // this is the nested subject-wise marks
-
-                            JexpoApplElgbExam::updateOrCreate(
-                                [
-                                    'exam_appl_form_num' => $form_num,
-                                ],
-                                [
-                                    'exam_elgb_code'    => $request->exam_elgb_code,
-                                    'exam_board'         => $request->exam_board,
-                                    'exam_pass_yr'       => $request->exam_pass_yr,
-                                    'exam_tot_marks'     => $request->exam_total_marks,
-                                    'exam_ob_marks'      => $request->obtained_marks,
-                                    'exam_school_name'   => $request->exam_school_name,
-                                    'exam_marks_type'    => $request->exam_marks_type ?? null,
-                                    'exam_per_marks'     => json_encode($exam_per_marks),
-                                    'exam_state_code'         => $request->exam_state,
-                                    'exam_district'      => $request->exam_district,
-                                    'updated_at'         => now(),
-                                ]
-                            );
-
-                            auditTrail(
-                                $form_num,
-                                "{$student->s_candidate_name} has successfully updated profile at {$student->s_phone} on {$now}.",
-                                'update'
-                            );
-
-                            DB::commit();
-
-                            return response()->json([
-                                'error' => false,
-                                'message' => 'Data updated successfully',
-                                'is_profile_updated' => $profile_save
-                            ], 200);
-                        } catch (\Exception $e) {
-                            DB::rollBack();
-                            return response()->json([
-                                'error' => true,
-                                'message' => $e->getMessage()
-                            ], 500);
-                        }
-                    } else {
-                        return response()->json([
-                            'error'     =>  true,
-                            'message'   =>  "Oops! you don't have sufficient permission"
-                        ], 403);
+            if ($request->hasFile('student_photo') && $request->file('student_photo')->isValid()) {
+                // Unlink old photo if exists
+                if (!empty($student->s_photo)) {
+                    $oldPhotoPath = storage_path('app/public/' . $student->s_photo);
+                    if (file_exists($oldPhotoPath)) {
+                        unlink($oldPhotoPath);
                     }
+                }
+
+                $image = $request->file('student_photo');
+                $imageName = $form_num . '_image_' . $currentTime . '.' . $image->getClientOriginalExtension();
+                $imagePath = 'uploads/' . $imageName;
+                $image->storeAs('uploads/', $imageName, 'public');
+
+                $student_photo = $imagePath;
+            }
+
+            // SIGNATURE
+            $student_sign = $student->s_sign; // default to existing
+
+            if ($request->hasFile('student_sign') && $request->file('student_sign')->isValid()) {
+                // Unlink old signature if exists
+                if (!empty($student->s_sign)) {
+                    $oldSignPath = storage_path('app/public/' . $student->s_sign);
+                    if (file_exists($oldSignPath)) {
+                        unlink($oldSignPath);
+                    }
+                }
+
+                $signature = $request->file('student_sign');
+                $signatureName = $form_num . '_sign_' . $currentTime . '.' . $signature->getClientOriginalExtension();
+                $signaturePath = 'uploads/' . $signatureName;
+                $signature->storeAs('uploads/', $signatureName, 'public');
+
+                $student_sign = $signaturePath;
+            }
+
+
+            $student_tfw_document_path = null;
+            if ($request->is_tfw === '1') {
+                if ($request->hasFile('student_tfw_document') && $request->file('student_tfw_document')->isValid()) {
+                    $document = $request->file('student_tfw_document');
+                    $documentName = $form_num . '_tfw_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_tfw_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_tfw_document)) {
+                    $student_tfw_document_path =  $student->s_tfw_doc  ? $student->s_tfw_doc
+                        : null;
                 } else {
                     return response()->json([
-                        'error'     =>  true,
-                        'message'   =>  "Oops! you don't have sufficient permission"
-                    ], 401);
+                        'success' => false,
+                        'message' => 'TFW document is mandatory when TFW is selected.'
+                    ], 400);
+                }
+            }
+            if ($request->is_pwd === '1') {
+                if ($request->hasFile('student_pwd_document') && $request->file('student_pwd_document')->isValid()) {
+                    $document = $request->file('student_pwd_document');
+                    $documentName = $form_num . '_pwd_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_pwd_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_pwd_document)) {
+                    $student_pwd_document_path = $student->s_pwd_doc ?? null;
+                }
+                $pwd_certificate_number = trim($request->pc_cert_no ?? '') !== ''
+                    ? $request->pc_cert_no
+                    : ($student->pc_cert_no ?? null);
+
+                $pwd_certificate_issue_date = trim($request->pc_cert_date ?? '') !== ''
+                    ? $request->pc_cert_date
+                    : ($student->pc_cert_date ?? null);
+                if (empty($student_pwd_document_path) || empty($pwd_certificate_number) || empty($pwd_certificate_issue_date)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'PWD certificate number, issue date, and document are required when PWD is selected.'
+                    ], 400);
                 }
             } else {
-                return response()->json([
-                    'error'     =>  true,
-                    'message'   =>  'Unable to process your request due to invalid token'
-                ], 401);
+                $student_pwd_document_path = null;
+                $pwd_certificate_number = '';
+                $pwd_certificate_issue_date = '';
             }
-        } else {
+            $student_llq_document_path = null;
+            if ($request->is_llq === '1') {
+                if ($request->hasFile('student_llq_document') && $request->file('student_llq_document')->isValid()) {
+                    $document = $request->file('student_llq_document');
+                    $documentName = $form_num . '_llq_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_llq_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_llq_document)) {
+                    $student_llq_document_path =  $student->s_llq_doc  ? $student->s_llq_doc : null;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'LLQ document is mandatory when LLQ is selected.'
+                    ], 400);
+                }
+            }
+            $student_exsm_document_path = null;
+            if ($request->is_exsm === '1') {
+                if ($request->hasFile('student_exsm_document') && $request->file('student_exsm_document')->isValid()) {
+                    $document = $request->file('student_exsm_document');
+                    $documentName = $form_num . '_exsm_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_exsm_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_exsm_document)) {
+                    $student_exsm_document_path =  $student->s_exsm_doc  ? $student->s_exsm_doc : null;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'EXSM document is mandatory when EXSM is selected.'
+                    ], 400);
+                }
+            }
+            $student_caste_document_path = $student->s_caste_doc;
+            $certificate_number = null;
+            $certificate_issue_date = null;
+            $sub_caste_category = null;
+            if (strtoupper(trim($request->student_caste)) !== 'GENERAL') {
+                if ($request->hasFile('student_caste_document') && $request->file('student_caste_document')->isValid()) {
+                    $document = $request->file('student_caste_document');
+                    $documentName = $form_num . '_caste_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_caste_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_caste_document)) {
+                    $student_caste_document_path =  $student->s_caste_doc  ? $student->s_caste_doc
+                        : null;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Caste certificate is mandatory when caste is not GENERAL.'
+                    ], 400);
+                }
+                $certificate_number = $request->cert_number;
+                $sub_caste_category = $request->sub_caste_category;
+                $certificate_issue_date = $request->cert_issue_date;
+            }
+
+            if ($request->is_ews === '1') {
+                if ($request->hasFile('student_ews_document') && $request->file('student_ews_document')->isValid()) {
+                    $document = $request->file('student_ews_document');
+                    $documentName = $form_num . '_ews_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_ews_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_ews_document)) {
+                    $student_ews_document_path = $student->s_ews_doc ?? null;
+                }
+                $ews_certificate_number = trim($request->ews_cert_number ?? '') !== ''
+                    ? $request->ews_cert_number
+                    : ($student->ews_cert_number ?? null);
+
+                $ews_certificate_issue_date = trim($request->ews_cert_date ?? '') !== ''
+                    ? $request->ews_cert_date
+                    : ($student->ews_cert_date ?? null);
+                $ews_valid_year = trim($request->ews_valid_year ?? '') !== ''
+                    ? $request->ews_valid_year
+                    : ($student->ews_valid_year ?? null);
+                if (empty($student_ews_document_path) || empty($ews_certificate_number) || empty($ews_certificate_issue_date) || empty($ews_valid_year)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'EWS certificate number, valid year, issue date, and document are required when EWS is selected.'
+                    ], 400);
+                }
+            } else {
+                // EWS is not selected, so clear values
+                $student_ews_document_path = null;
+                $ews_certificate_number = '';
+                $ews_certificate_issue_date = '';
+                $ews_valid_year = '';
+            }
+
+
+            if ($request->hasFile('student_aadhar_document') && $request->file('student_aadhar_document')->isValid()) {
+                $document = $request->file('student_aadhar_document');
+                $documentName = $form_num . '_aadhar_document.' . $document->getClientOriginalExtension();
+                $document->storeAs('uploads/', $documentName, 'public');
+                $student_aadhar_document_path = 'uploads/' . $documentName;
+            } elseif (is_string($request->student_aadhar_document)) {
+                $student_aadhar_document_path =  $student->s_adhar_doc  ? $student->s_adhar_doc : null;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'adhar document is mandatory '
+                ], 400);
+            }
+
+            if ($request->hasFile('bank_passbook_document') && $request->file('bank_passbook_document')->isValid()) {
+                $document = $request->file('bank_passbook_document');
+                $documentName = $form_num . '_bank_passbook_document.' . $document->getClientOriginalExtension();
+                $document->storeAs('uploads/', $documentName, 'public');
+                $student_bank_passbook_document_path = 'uploads/' . $documentName;
+            } elseif (is_string($request->bank_passbook_document)) {
+                $student_bank_passbook_document_path =  $student->s_bank_passbook_doc  ? $student->s_bank_passbook_doc : null;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'bank passbook document is mandatory '
+                ], 400);
+            }
+            if ($request->hasFile('student_age_proof_document')) {
+                $document = $request->file('student_age_proof_document');
+                $documentName = $form_num . '_age_proof_document.' . $document->getClientOriginalExtension();
+                $document->storeAs('uploads/', $documentName, 'public');
+                $student_age_proof_document_path = 'uploads/' . $documentName;
+            } elseif (is_string($request->student_age_proof_document)) {
+                $student_age_proof_document_path = $student->s_age_doc  ?  $student->s_age_doc
+                    : null;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'this document is mandatory'
+                ], 400);
+            }
+            if ($request->hasFile('student_marksheet_document')) {
+                $document = $request->file('student_marksheet_document');
+                $documentName = $form_num . '_marksheet_document.' . $document->getClientOriginalExtension();
+                $document->storeAs('uploads/', $documentName, 'public');
+                $student_marksheet_document_path = 'uploads/' . $documentName;
+            } elseif (is_string($request->student_marksheet_document)) {
+                $student_marksheet_document_path = $student->s_marksheet_doc  ?  $student->s_marksheet_doc
+                    : null;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'this document is mandatory'
+                ], 400);
+            }
+            //
+            $enc_aadhaar_num = encryptHEXFormat($request->student_aadhar_no);
+
+            DB::beginTransaction();
+            $bank_details = json_decode($request->bank_details, true);
+            // dd($certificate_number);
+            $student->update([
+                's_first_name'        => trim($request->student_first_name),
+                's_middle_name'       => trim($request->student_middle_name),
+                's_last_name'         => trim($request->student_last_name),
+                's_candidate_name'    => trim($request->student_first_name)
+                    . (
+                        (isset($request->student_middle_name) &&
+                            !empty(trim($request->student_middle_name)) &&
+                            strtolower(trim($request->student_middle_name)) !== 'null')
+                        ? ' ' . trim($request->student_middle_name)
+                        : ''
+                    )
+                    . ' ' . trim($request->student_last_name),
+                's_father_name'       => trim($request->student_father_name),
+                's_mother_name'       => trim($request->student_mother_name),
+                's_dob'               => $request->student_dob,
+                's_aadhar_no'         => $enc_aadhaar_num,
+                's_email'             => trim($request->student_email),
+                's_gender'            => $request->student_gender,
+                's_religion'          => $request->student_religion,
+                's_caste'             => $request->student_caste,
+                's_subdivision' => (
+                    isset($request->student_subdivision) &&
+                    trim(strtolower($request->student_subdivision)) !== '' &&
+                    trim(strtolower($request->student_subdivision)) !== 'null'
+                ) ? $request->student_subdivision : null,
+                's_address2'          => $request->student_address2,
+                's_pwd'               => $request->is_pwd,
+                's_photo'             => $student_photo,
+                's_sign'              => $student_sign,
+                's_guardian_name'     => $request->student_guardian_name,
+                's_citizenship'       => $request->student_citizenship,
+                's_pin_no'            => $request->student_pin_no,
+                's_police_station'         => $request->student_police_station,
+                's_post_office'         => $request->student_post_office,
+                's_home_district'     => trim($request->student_home_dist),
+                's_state_id'          => $request->student_state_id,
+                's_address'           => trim($request->student_address),
+                's_trade_code'        => $request->trade_code,
+                'is_married'          => $request->is_married,
+                's_kanyashree'        => $request->student_kanyashree_no,
+                's_tfw'     => $request->is_tfw,
+                's_ews'     => $request->is_ews,
+                's_llq'     => $request->is_llq,
+                's_exsm'    => $request->is_exsm,
+                's_caste_doc' => $student_caste_document_path,
+                's_pwd_doc'   => $student_pwd_document_path,
+                's_tfw_doc'   => $student_tfw_document_path,
+                's_llq_doc'   => $student_llq_document_path,
+                's_exsm_doc'  => $student_exsm_document_path,
+                's_ews_doc'   => $student_ews_document_path,
+                's_bank_passbook_doc'   => $student_bank_passbook_document_path,
+                's_age_doc'   => $student_age_proof_document_path,
+                's_marksheet_doc' => $student_marksheet_document_path,
+                'cast_cert_number' =>  $certificate_number,
+                'cast_cert_date' =>  $certificate_issue_date,
+                'cast_sub_category' => $sub_caste_category,
+                's_block' => $request->student_block,
+                's_adhar_doc' => $student_aadhar_document_path,
+                's_bank_details' => json_encode($bank_details),
+                'ews_cert_number' => $ews_certificate_number,
+                'ews_cert_date' => $ews_certificate_issue_date,
+                'ews_valid_year' => $ews_valid_year,
+                'pc_cert_no' => $pwd_certificate_number,
+                'pc_cert_date' => $pwd_certificate_issue_date,
+
+
+
+            ]);
+
+
+            $exam_per_marks = json_decode($request->exam_marks, true); // this is the nested subject-wise marks
+
+            JexpoApplElgbExam::updateOrCreate(
+                [
+                    'exam_appl_form_num' => $form_num,
+                ],
+                [
+                    'exam_elgb_code'    => $request->exam_elgb_code,
+                    'exam_board'         => $request->exam_board,
+                    'exam_pass_yr'       => $request->exam_pass_yr,
+                    'exam_tot_marks'     => $request->exam_total_marks,
+                    'exam_ob_marks'      => $request->obtained_marks,
+                    'exam_school_name'   => $request->exam_school_name,
+                    'exam_marks_type'    => $request->exam_marks_type ?? null,
+                    'exam_per_marks'     => json_encode($exam_per_marks),
+                    'exam_state_code'         => $request->exam_state,
+                    'exam_district'      => $request->exam_district,
+                    'updated_at'         => now(),
+                ]
+            );
+
+            $authUserId = $request->auth_user_id ?? null;
+
+            $logMessage = $authUserId
+                ? "{$student->s_candidate_name} has successfully updated profile by User ID {$authUserId} on {$now}."
+                : "{$student->s_candidate_name} has successfully updated profile at {$student->s_phone} on {$now}.";
+
+            auditTrail($form_num, $logMessage, 'update');
+
+            DB::commit();
+
             return response()->json([
-                'error'     =>  true,
-                'message'   =>  'Unable to process your request due to non availability of token'
-            ], 401);
+                'error' => false,
+                'message' => 'Application updated successfully',
+                'is_profile_updated' => $profile_save
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -784,7 +782,7 @@ class StudentController extends Controller
 
             // Position → bottom-right
             $x = $canvas->get_width() - $width - 40;
-            $y = $canvas->get_height() - 20;
+            $y = $canvas->get_height() - 40;
 
             $canvas->text($x, $y, $text, $font, $size);
         });

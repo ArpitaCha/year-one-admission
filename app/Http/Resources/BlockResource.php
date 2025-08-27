@@ -4,9 +4,8 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Str;
 
-class EligibilityResource extends JsonResource
+class BlockResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -16,9 +15,13 @@ class EligibilityResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'           =>  $this->id,
-            'name'         => strtoupper($this->elgb_exam),
-            'code'          => $this->marks_type,
+            'block_id'           =>  $this->id,
+            'block_name'         =>  $this->name,
+            'subdivision_name'            =>  $this->subdivision->name,
+            'subdivision_id'              =>  $this->subdivision_id,
+            'schcd'                 =>  $this->schcd,
+
+
             //'block_municipality'  =>  BlockMunicipalityResource::collection($this->whenLoaded('district')),
         ];
     }

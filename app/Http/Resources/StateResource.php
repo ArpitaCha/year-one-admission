@@ -17,6 +17,7 @@ class StateResource extends JsonResource
         return [
             'state_id'           =>  $this->state_id_pk,
             'state_name'         =>  $this->state_name,
+            'state_code'        =>  (int)$this->state_code
         ];
     }
 }
