@@ -32,4 +32,10 @@ class SuperUser extends Model
             return new VerifierStudentAssign();
         });
     }
+      public function institute()
+    {
+        return $this->hasOne('App\Models\Institute', "i_code", "u_inst_code")->withDefault(function () {
+            return new Institute();
+        });
+    }
 }

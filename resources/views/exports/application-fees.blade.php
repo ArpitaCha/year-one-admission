@@ -177,7 +177,9 @@
                 <td><strong>Date of Birth</strong></td>
                 <td>{{ \Carbon\Carbon::parse($students->s_dob)->format('d-m-Y') }}</td>
                 <td><strong>Age as on 01.07.2026</strong></td>
-                <td>{{ \Carbon\Carbon::parse($students->s_dob)->age }} Years</td>
+                <td>
+                    {{ $age->y }} Years {{ $age->m }} Months {{ $age->d }} Days
+                </td>
             <tr>
                 
                 <td><strong>Gender</strong></td>
@@ -195,7 +197,7 @@
                 <td><strong>Religion</strong></td>
                 <td>{{ $students->s_religion }}</td>
                 <td><strong>Marital Status</strong></td>
-                <td>{{ $students->is_married == 1 ? 'Married' : 'Unmarried' }}</td>
+                <td>{{ $students->is_married == 1 ? 'MARRIED' : 'UNMARRIED' }}</td>
             </tr>
             <tr>
                 <td><strong>Email ID</strong></td>
@@ -222,14 +224,13 @@
                 <td><strong>Police Station</strong></td>
                 <td>{{ $students->s_police_station }}</td>
                 <td><strong>Block</strong></td>
-                <td>{{ $students->block->name }}</td>
-                
+                <td>{{ $student_data['block']['name'] ?? 'N/A' }}</td>
             </tr>
             
             
             <tr>
                  <td><strong>Sub-Division</strong></td>
-                <td>{{ $students->subdivision->name ?? 'N/A' }}</td>
+                <td>{{ $student_data['subdivision']['name'] ?? 'N/A' }}</td>
                 <td><strong>District</strong></td>
                 <td>{{ $students->district->district_name ?? 'N/A' }}</td>
             </tr>
@@ -335,7 +336,7 @@
                             <td style="text-align: center"><strong>School District</strong></td>
                             <td style="text-align: center"><strong>Year of Passing</strong></td>
                             <td style="text-align: center"><strong>Board</strong></td>
-                            <td style="text-align: center"><strong>Total Marks</strong></td>
+                            <td style="text-align: center"><strong>Total Aggregate Marks</strong></td>
                             <td style="text-align: center"><strong>Total Marks Obtained</strong></td>
                             <td style="text-align: center"><strong>Overall % </strong><span style="font-size:10px;">(Rounded off upto 2 decimal places)</span></td>
                         </tr>
@@ -345,7 +346,7 @@
                             <td style="text-align: center">{{ $education->exam_school_name }}</td>
                             <td style="text-align: center">{{ $education->district->district_name ?? 'N/A' }}</td> 
                             <td style="text-align: center">{{ $education->exam_pass_yr }}</td>
-                            <td style="text-align: center">{{ $education->board->board_name }}</td>
+                            <td style="text-align: center">{{ strtoupper($education->board->board_name) }}</td>
                             <td style="text-align: center">{{ $education->exam_tot_marks ?? 'N/A' }}</td>
                             <td style="text-align: center">{{ $education->exam_ob_marks ?? 'N/A' }}</td>
                             <td style="text-align: center">

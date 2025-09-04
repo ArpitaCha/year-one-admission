@@ -19,4 +19,8 @@ class District extends Model
             return new State();
         });
     }
+    public function institutes()
+    {
+        return $this->hasMany(Institute::class, 'i_dist_code', 'district_id_pk');
+    }
 }

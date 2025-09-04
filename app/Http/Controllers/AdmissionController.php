@@ -23,6 +23,7 @@ use App\Models\Student;
 use App\Models\SuperUser;
 use App\Models\AuditTrail;
 use App\Models\AuthPermission;
+use App\Models\HeadVerifierStudentAssign;
 use App\Models\VerifierStudentAssign;
 use App\Models\AuthUrl;
 use Illuminate\Support\Facades\Http;
@@ -176,6 +177,26 @@ class AdmissionController extends Controller
                         ], 400);
                     }
                 }
+                $student_kanyashree_document_path = null;
+                $student_kanyashree_no = null;
+                if ($request->is_kanyashree === '1') {
+                    if ($request->hasFile('student_kanyashree_document')) {
+                        $document = $request->file('student_kanyashree_document');
+                        $documentName = $s_appl_form_num . '_kanyashree_document.' . $document->getClientOriginalExtension();
+                        $document->storeAs('uploads/', $documentName, 'public');
+                        $student_kanyashree_document_path = 'uploads/' . $documentName;
+                    } elseif (is_string($request->student_kanyashree_document)) {
+                        $student_kanyashree_document_path =  $student->s_kanyashree_doc  ? $student->s_kanyashree_doc
+                            : null;
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Kanyashree document is mandatory when Kanyashree is selected.'
+                        ], 400);
+                    }
+                    $student_kanyashree_no = $request->student_kanyashree_no ?? '';
+                }
+
 
                 if ($request->is_pwd === '1') {
                     if ($request->hasFile('student_pwd_document') && $request->file('student_pwd_document')->isValid()) {
@@ -515,23 +536,7 @@ class AdmissionController extends Controller
         $userData = $request->auth_user ?? null;
 
         if ($roleId == 1) {
-            $list = SuperUser::whereNotIn('u_role_id', [1])->with('role')->get()->map(function ($data) {
-                return [
-                    'institute' => [
-                        'inst_code'   => $data->u_inst_code ?? '',
-                        'inst_name' => $data->u_inst_name ?? '',
-                    ],
-                    'phone_no' => $data->u_phone,
-                    'name' => $data->u_fullname,
-                    'email' => $data->u_email,
-                    'role'      => [
-                        'role_id'   => $data->u_role_id ?? '',
-                        'role_name' => optional($data->role)->role_name,
-                    ],
-                ];
-            });
-        } elseif ($roleId == 3) {
-            $list = SuperUser::where('u_role_id', 4)->where('u_inst_code', $userData->u_inst_code)->where('u_inst_district', $userData->u_inst_district)->with('role')->get()->map(function ($data) {
+            $list = SuperUser::whereNotIn('u_role_id', [1])->with('role', 'district')->get()->map(function ($data) {
                 return [
                     'institute' => [
                         'inst_code'   => $data->u_inst_code ?? '',
@@ -541,6 +546,31 @@ class AdmissionController extends Controller
                     'name' => $data->u_fullname,
                     'email' => $data->u_email,
                     'username' => $data->u_username,
+                    'district' => [
+                        'district_id'   => optional($data->district)->district_id_pk,
+                        'district_name' => optional($data->district)->district_name,
+                    ],
+                    'role'      => [
+                        'role_id'   => $data->u_role_id ?? '',
+                        'role_name' => optional($data->role)->role_name,
+                    ],
+                ];
+            });
+        } elseif ($roleId == 3) {
+            $list = SuperUser::where('u_role_id', 4)->where('u_inst_code', $userData->u_inst_code)->where('u_inst_district', $userData->u_inst_district)->with('role', 'district')->get()->map(function ($data) {
+                return [
+                    'institute' => [
+                        'inst_code'   => $data->u_inst_code ?? '',
+                        'inst_name' => $data->u_inst_name ?? '',
+                    ],
+                    'phone_no' => $data->u_phone,
+                    'name' => $data->u_fullname,
+                    'email' => $data->u_email,
+                    'username' => $data->u_username,
+                    'district' => [
+                        'district_id'   => optional($data->district)->district_id_pk,
+                        'district_name' => optional($data->district)->district_name,
+                    ],
                     'role'      => [
                         'role_id'   => $data->u_role_id ?? '',
                         'role_name' => optional($data->role)->role_name,
@@ -567,51 +597,134 @@ class AdmissionController extends Controller
     }
     public function addVerifier(Request $request)
     {
+        // Validation
         $validated = Validator::make($request->all(), [
             'phone_no' => 'required',
-            'name' => 'required',
-            'email' => 'required|email',
+            'name'     => 'required',
+            'email'    => 'required|email',
             'inst_code' => 'required',
-            'role_id' => 'required',
+            'role_id'  => 'required|in:3,4', // only allow Head Verifier(3) or Verifier(4)
+
         ]);
+
         if ($validated->fails()) {
             return response()->json([
-                'error' => true,
+                'error'   => true,
                 'message' => $validated->errors()->first()
             ], 422);
         }
-        $inst_name = Institute::where('i_code', $request->inst_code)->value('i_name');
 
-        $create_user = SuperUser::updateOrCreate(
-            ['u_phone' => $request->phone_no],
-            [
-                'u_fullname'  => $request->name,
-                'u_email'     => $request->email,
-                'u_username'  => $request->username,
-                'u_inst_name' =>  $inst_name,
-                'u_inst_code' => $request->inst_code,
-                'u_role_id'   => $request->role_id,
-                'u_inst_district'    => $request->district
-            ]
-        );
+        // Normalize name
+        $normalizedName = preg_replace('/\s+/', ' ', trim($request->name));
+        $instName = Institute::where('i_code', $request->inst_code)->value('i_name');
 
-        if ($create_user) {
-            $message = $create_user->wasRecentlyCreated
-                ? 'User created successfully'
-                : 'User updated successfully';
+        // Check if phone already exists for the role
+        $roleId = $request->role_id;
+        if (SuperUser::where('u_role_id', $roleId)->where('u_phone', $request->phone_no)->exists()) {
+            $message = $roleId == 3 ? 'Head Verifier already exists with this phone number' : 'Verifier already exists with this phone number';
+            return response()->json(['error' => true, 'message' => $message], 400);
+        }
 
+        // Check if normalized name already exists for the role
+        if (SuperUser::where('u_role_id', $roleId)
+            ->whereRaw('LOWER(REGEXP_REPLACE(u_fullname, \'\\s+\', \' \', \'g\')) = ?', [strtolower($normalizedName)])
+            ->exists()
+        ) {
+            $message = $roleId == 3 ? 'Head Verifier already exists with this name' : 'Verifier already exists with this name';
+            return response()->json(['error' => true, 'message' => $message], 400);
+        }
+
+        // Create the user
+        $superUser = SuperUser::create([
+            'u_fullname'      => $normalizedName,
+            'u_email'         => $request->email,
+            'u_username'      => $request->username,
+            'u_phone'         => $request->phone_no,
+            'u_inst_name'     => $instName,
+            'u_inst_code'     => $request->inst_code,
+            'u_role_id'       => $roleId,
+            'u_inst_district' => $request->district,
+            'created_at'      => now()
+        ]);
+
+        if ($superUser) {
             return response()->json([
                 'error'   => false,
-                'message' => $message,
-                'data'    => $create_user
-            ]);
-        } else {
-            return response()->json([
-                'error'   => true,
-                'message' => 'Failed to create or update user'
+                'message' => 'User created successfully',
+                'data'    => $superUser
             ]);
         }
+
+        return response()->json([
+            'error'   => true,
+            'message' => 'Something went wrong while creating the user'
+        ], 500);
     }
+
+    public function updateVerifier(Request $request)
+    {
+        // Validation
+        $validated = Validator::make($request->all(), [
+            'phone_no' => 'required',
+            'name'     => 'required',
+            'email'    => 'required|email',
+            'inst_code' => 'required',
+            'role_id'  => 'required|in:3,4', // ensure role is valid
+
+        ]);
+
+        if ($validated->fails()) {
+            return response()->json([
+                'error'   => true,
+                'message' => $validated->errors()->first()
+            ], 422);
+        }
+
+        // Normalize name
+        $normalizedName = preg_replace('/\s+/', ' ', trim($request->name));
+        $instName = Institute::where('i_code', $request->inst_code)->value('i_name');
+
+        // Find user by phone
+        $existingUser = SuperUser::where('u_phone', $request->phone_no)->first();
+
+        if (!$existingUser) {
+            return response()->json([
+                'error'   => true,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // Check if normalized name already exists for the role (excluding current user)
+        $roleId = $request->role_id;
+        if (SuperUser::where('u_role_id', $roleId)
+            ->whereRaw('LOWER(REGEXP_REPLACE(u_fullname, \'\\s+\', \' \', \'g\')) = ?', [strtolower($normalizedName)])
+            ->where('u_id', '!=', $existingUser->u_id)
+            ->exists()
+        ) {
+            $message = $roleId == 3 ? 'Head Verifier already exists with this name' : 'Verifier already exists with this name';
+            return response()->json(['error' => true, 'message' => $message], 400);
+        }
+
+        // Update user
+        $existingUser->update([
+            'u_fullname'      => $normalizedName,
+            'u_email'         => $request->email,
+            'u_username'      => $request->username,
+            'u_phone'         => $request->phone_no,
+            'u_inst_name'     => $instName,
+            'u_inst_code'     => $request->inst_code,
+            'u_role_id'       => $roleId,
+            'u_inst_district' => $request->district,
+            'updated_at'      => now()
+        ]);
+
+        return response()->json([
+            'error'   => false,
+            'message' => 'User updated successfully',
+            'data'    => $existingUser
+        ]);
+    }
+
     public function checkValidationFields(Request $request, $role)
     {
         try {
@@ -667,117 +780,334 @@ class AdmissionController extends Controller
     }
     public function districtWiseVerifier(Request $request)
     {
+        $role_id = $request->auth_role_id;
         $district_id = $request->district_id;
-        $today = now();
-        $verifier_list = SuperUser::with(['verifierstudentassign' => function ($query) use ($district_id) {
-            $query->where('dist_id', $district_id);
-        }])
-            ->select('u_id', 'u_fullname')
-            ->where('u_role_id', 3)
-            ->where('u_inst_district', $district_id)
-            ->get()
-            ->map(function ($verifier) {
+        if ($role_id == 1) {
+            $today = now();
+
+            // Get all head verifiers in the district
+            $verifiers = SuperUser::with(['HeadVerifierStudentAssign' => function ($query) use ($district_id) {
+                $query->where('dist_id', $district_id);
+            }, 'institute'])
+                ->select('u_id', 'u_fullname', 'u_inst_code')
+                ->where('u_role_id', 3)
+                ->where('u_inst_district', $district_id)
+                ->get();
+
+            // Build verifier list with student count
+            $verifier_list = $verifiers->map(function ($verifier) use ($district_id) {
+                $student_count = HeadVerifierStudentAssign::where('dist_id', $district_id)
+                    ->where('head_verifier_id', $verifier->u_id)
+                    ->count();
+
                 return [
-                    'verifier_id'   => $verifier->u_id,
-                    'verifier_name' => $verifier->u_fullname,
-                    'student_count' => $verifier->verifierstudentassign->student_no ?? 0,
+                    'verifier_id'        => $verifier->u_id,
+                    'verifier_name'      => $verifier->u_fullname,
+                    'verifier_inst_name' => optional($verifier->institute)->i_name,
+                    'student_count'      => $student_count,
                 ];
             });
-        $count = $verifier_list->count();
-        $student_list = JexpoApplElgbExam::where('exam_district', $district_id)->get()->count();
-        $students = Student::whereIn(
-            's_appl_form_num',
-            JexpoApplElgbExam::where('exam_district', $district_id)->pluck('exam_appl_form_num')
-        )->where('is_assign', 1)->get();
-        $assign_student_list = $students->count();
-        $left_student_list = $student_list - $assign_student_list;
 
 
-        return response()->json([
-            'error' => false,
-            'distribution' => $verifier_list,
-            'count' => $count,
-            'student_count' => $student_list,
-            'assigned_student_count' => $assign_student_list,
-            'left_student_count' => $left_student_list
-        ]);
+            $count = $verifier_list->count();
+
+
+            $student_list = Student::where('s_home_district', $district_id)
+                ->where('is_payment', 1)
+                ->count();
+
+
+            $assign_student_list = Student::where('s_home_district', $district_id)
+                ->where('is_assign', 1)
+                ->count();
+
+            // Remaining students
+            $left_student_list = $student_list - $assign_student_list;
+
+            return response()->json([
+                'error' => false,
+                'distribution' => $verifier_list,
+                'count' => $count,
+                'student_count' => $student_list,
+                'assigned_student_count' => $assign_student_list,
+                'left_student_count' => $left_student_list
+            ]);
+        } elseif ($role_id == 3) {
+            $authUserId = $request->auth_user_id;
+
+            // Get all verifiers under this head verifier's district
+            $verifierList = SuperUser::with('institute')
+                ->select('u_id', 'u_fullname')
+                ->where('u_role_id', 4) // Regular verifier
+                ->where('u_inst_district', $district_id)
+                ->get()
+                ->map(function ($verifier) use ($authUserId, $district_id) {
+                    $studentCount = VerifierStudentAssign::where([
+                        ['verifier_id', '=', $verifier->u_id],
+                        ['head_verifier_id', '=', $authUserId],
+                        ['dist_id', '=', $district_id],
+                    ])
+                        ->count();
+
+                    return [
+                        'verifier_id'   => $verifier->u_id,
+                        'verifier_name' => $verifier->u_fullname,
+                        'student_count' => $studentCount,
+                        // Optional: include institute name if needed
+                        'institute_name' => $verifier->institute->name ?? null,
+                    ];
+                });
+
+            $count = $verifierList->count(); // total verifiers under head
+
+            // Total students assigned to this head verifier
+            $student_list = HeadVerifierStudentAssign::where('dist_id', $district_id)
+                ->where('head_verifier_id', $authUserId)
+                ->count();
+
+            // Total students distributed (assigned + distributed)
+            $assignStudentCount = HeadVerifierStudentAssign::where('head_verifier_id', $authUserId)
+                ->where('dist_id', $district_id)
+                ->whereHas('student', function ($query) {
+                    $query->where('is_assign', 1)
+                        ->where('is_distribute', 1);
+                })
+                ->count();
+
+            // Remaining students under this head verifier
+            $left_student_list = $student_list - $assignStudentCount;
+
+            return response()->json([
+                'error' => false,
+                'distribution' => $verifierList,
+                'count' => $count,
+                'student_count' => $student_list,
+                'assigned_student_count' => $assignStudentCount,
+                'left_student_count' => $left_student_list
+            ]);
+        }
     }
+
     public function districtWiseAssign(Request $request)
     {
         $districtId = $request->district_id;
-        $examFormNos = JexpoApplElgbExam::where('exam_district', $districtId)
-            ->pluck('exam_appl_form_num');
+        $role_id    = $request->auth_role_id;
 
-        if ($examFormNos->isEmpty()) {
-            return response()->json(['message' => 'No students found in Jexpo'], 404);
-        }
-        $students = Student::whereIn('s_appl_form_num', $examFormNos)
-            ->where('is_assign', 0)
-            ->pluck('s_appl_form_num');
+        if ($role_id == 1) {
 
-        if ($students->isEmpty()) {
-            return response()->json(['message' => 'No unassigned students found'], 404);
-        }
-        $verifiers = SuperUser::where('u_role_id', 3)
-            ->where('u_inst_district', $districtId)
-            ->get(['u_id', 'u_fullname', 'u_inst_code']);
+            $districtId = $request->input('district_id');
 
-        if ($verifiers->isEmpty()) {
-            return response()->json(['message' => 'No verifiers found'], 404);
-        }
-        $totalStudents   = $students->count();
-        $totalVerifiers  = $verifiers->count();
+            // Step 1: Fetch unassigned, paid students from the district
+            $students = Student::where('s_home_district', $districtId)
+                ->where('is_payment', 1)
+                ->where('is_assign', 0)
+                ->pluck('s_appl_form_num');
 
-        $perVerifier = intdiv($totalStudents, $totalVerifiers);
-
-        $extra       = $totalStudents % $totalVerifiers;
-        $assignments   = [];
-        $distribution  = [];
-        $studentIndex  = 0;
-
-        foreach ($verifiers as $index => $verifier) {
-            $count = $perVerifier + ($index < $extra ? 1 : 0);
-            $assignedStudents = $students->slice($studentIndex, $count);
-
-            if ($assignedStudents->isEmpty()) {
-                continue;
+            if ($students->isEmpty()) {
+                return response()->json(['message' => 'No unassigned students found'], 404);
             }
-            $existing = VerifierStudentAssign::where('head_verifier_id', $verifier->u_id)
-                ->where('dist_id', $districtId)
+
+            // Step 2: Fetch head verifiers from the district
+            $verifiers = SuperUser::where('u_role_id', 3)
+                ->where('u_inst_district', $districtId)
+                ->get(['u_id', 'u_fullname', 'u_inst_code']);
+
+            if ($verifiers->isEmpty()) {
+                return response()->json(['message' => 'No head verifiers found'], 404);
+            }
+
+            // Step 3: Calculate distribution
+            $totalStudents  = $students->count();
+            $totalVerifiers = $verifiers->count();
+            $perVerifier    = intdiv($totalStudents, $totalVerifiers);
+            $extra          = $totalStudents % $totalVerifiers;
+
+            $distribution   = [];
+            $studentIndex   = 0;
+
+            // Step 4: Assign students to verifiers
+            foreach ($verifiers as $index => $verifier) {
+                $count = $perVerifier + ($index < $extra ? 1 : 0);
+                $assignedStudents = $students->slice($studentIndex, $count);
+
+                if ($assignedStudents->isEmpty()) {
+                    continue;
+                }
+
+                // Insert assignments
+                foreach ($assignedStudents as $formNum) {
+                    HeadVerifierStudentAssign::create([
+                        'head_verifier_id'   => $verifier->u_id,
+                        'dist_id'            => $districtId,
+                        'inst_code'          => $verifier->u_inst_code,
+                        'student_form_num'   => $formNum,
+                        'created_at'         => now(),
+                    ]);
+                }
+
+                // Update student assignment status
+                Student::whereIn('s_appl_form_num', $assignedStudents)
+                    ->update(['is_assign' => 1]);
+
+                // Track distribution summary
+                $distribution[] = [
+                    'verifier_id'   => $verifier->u_id,
+                    'verifier_name' => $verifier->u_fullname,
+                    'student_count' => $assignedStudents->count(),
+                ];
+
+                $studentIndex += $count;
+            }
+
+            // Step 5: Return response
+            return response()->json([
+                'message'         => 'Students assigned successfully to head verifiers',
+                'total_students'  => $totalStudents,
+                'total_verifiers' => $totalVerifiers,
+                'distribution'    => $distribution,
+            ]);
+        } elseif ($role_id == 3) {
+            $user_id = $request->auth_user_id ?? null;
+
+            // Step 1: Validate Head Verifier
+            $headVerifier = SuperUser::where('u_id', $user_id)
+                ->where('u_role_id', 3)
                 ->first();
 
-            if ($existing) {
-                $existing->student_no += $assignedStudents->count();
-                $existing->updated_at = now();
-                $existing->save();
-            } else {
-                VerifierStudentAssign::create([
-                    'head_verifier_id'   => $verifier->u_id,
-                    'head_verifier_name' => $verifier->u_fullname,
-                    'dist_id'            => $districtId,
-                    'inst_code'          => $verifier->u_inst_code,
-                    'student_no'         => $assignedStudents->count(),
-                    'created_at'         => now(),
-                    'updated_at'         => now(),
-                ]);
+            if (!$headVerifier) {
+                return response()->json(['message' => 'Invalid Head Verifier'], 404);
             }
-            Student::whereIn('s_appl_form_num', $assignedStudents)
-                ->update(['is_assign' => 1]);
 
-            $distribution[] = (object)[
-                'verifier_id'   => $verifier->u_id,
-                'verifier_name' => $verifier->u_fullname,
-                'student_count' => $assignedStudents->count(),
-            ];
+            // Step 2: Fetch child verifiers under same institution and district
+            $childVerifiers = SuperUser::where('u_role_id', 4)
+                ->where('u_inst_code', $headVerifier->u_inst_code)
+                ->where('u_inst_district', $districtId)
+                ->get(['u_id', 'u_fullname', 'u_inst_code']);
 
-            $studentIndex += $count;
+            if ($childVerifiers->isEmpty()) {
+                return response()->json(['message' => 'No verifiers found under this head verifier'], 404);
+            }
+
+            // Step 3: Fetch students assigned to head verifier but not yet distributed
+            $students =   HeadVerifierStudentAssign::where('head_verifier_id', $user_id)
+                ->where('dist_id', $districtId)
+                ->whereHas('student', function ($query) {
+                    $query->where('is_assign', 1)
+                        ->where('is_distribute', 0);
+                })
+                ->pluck('student_form_num');
+
+            if ($students->isEmpty()) {
+                return response()->json(['message' => 'No students to distribute'], 404);
+            }
+
+            // Step 4: Calculate distribution
+            $totalStudents  = $students->count();
+            $totalVerifiers = $childVerifiers->count();
+            $perVerifier    = intdiv($totalStudents, $totalVerifiers);
+            $extra          = $totalStudents % $totalVerifiers;
+
+            $distribution = [];
+            $studentIndex = 0;
+
+            // Step 5: Distribute students to child verifiers
+            DB::beginTransaction();
+
+            try {
+                foreach ($childVerifiers as $index => $verifier) {
+                    $count = $perVerifier + ($index < $extra ? 1 : 0);
+                    $assignedStudents = $students->slice($studentIndex, $count)->values();
+
+                    if ($assignedStudents->isEmpty()) {
+                        continue;
+                    }
+
+
+                    foreach ($assignedStudents as $formNum) {
+                        VerifierStudentAssign::create([
+                            'head_verifier_id' => $user_id,
+                            'verifier_id'      => $verifier->u_id,
+                            'dist_id'          => $districtId,
+                            'inst_code'        => $verifier->u_inst_code,
+                            'student_form_num' => $formNum,
+                            'created_at'       => now(),
+                        ]);
+                    }
+
+                    Student::whereIn('s_appl_form_num', $assignedStudents)
+                        ->update(['is_distribute' => 1]);
+
+                    $distribution[] = [
+                        'verifier_id'   => $verifier->u_id,
+                        'verifier_name' => $verifier->u_fullname,
+                        'student_count' => $assignedStudents->count(),
+                    ];
+
+                    $studentIndex += $count;
+                }
+
+                DB::commit();
+
+                // Step 6: Return response
+                return response()->json([
+                    'message'         => 'Students distributed successfully to verifiers',
+                    'total_students'  => $totalStudents,
+                    'total_verifiers' => $totalVerifiers,
+                    'distribution'    => $distribution,
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'Distribution failed',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
         }
-        return response()->json([
-            'message'         => 'Students distributed successfully',
-            'total_students'  => $totalStudents,
-            'total_verifiers' => $totalVerifiers,
-            'distribution'    => $distribution,
-            'inserted_count'  => count($assignments),
-        ]);
+    }
+    public function otherdistrictverifier(Request $request)
+    {
+        $today = now();
+
+        // Force district logic to Howrah if another district is passed
+        $howrah_id = '15';
+        $effective_district_id = ($district_id == $howrah_id) ? $district_id : $howrah_id;
+
+        // Get all head verifiers in the effective district
+        $verifiers = SuperUser::with([
+            'HeadVerifierStudentAssign' => function ($query) use ($effective_district_id) {
+                $query->where('dist_id', $effective_district_id);
+            },
+            'institute',
+            'district'
+        ])
+            ->select('u_id', 'u_fullname', 'u_inst_code', 'u_inst_district')
+            ->where('u_role_id', 3)
+            ->where('u_inst_district', $effective_district_id)
+            ->get();
+        $verifier_list = $verifiers->map(function ($verifier) use ($effective_district_id) {
+            $student_count = HeadVerifierStudentAssign::where('dist_id', $effective_district_id)
+                ->where('head_verifier_id', $verifier->u_id)
+                ->count();
+
+
+            // Total students distributed (assigned + distributed)
+            $assignStudentCount = HeadVerifierStudentAssign::where('head_verifier_id', $authUserId)
+                ->where('dist_id', $effective_district_id)
+                ->whereHas('student', function ($query) {
+                    $query->where('is_assign', 1)
+                        ->where('is_distribute', 1);
+                })
+                ->count();
+            $left_student_list = $student_count - $assignStudentCount;
+
+            return [
+                'verifier_id'        => $verifier->u_id,
+                'verifier_name'      => $verifier->u_fullname,
+
+                'student_count'      => $student_count,
+                'assigned_student_count' => $assignStudentCount,
+                'left_student_count' => $left_student_list,
+            ];
+        });
     }
 }

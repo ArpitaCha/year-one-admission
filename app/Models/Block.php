@@ -15,6 +15,8 @@ class Block extends Model
     protected $guarded = [];
     public function subdivision()
     {
-        return $this->belongsTo(Subdivision::class, 'subdivision_id', 'id')->withDefault();
+        return $this->hasOne('App\Models\Subdivision', "id", "subdivision_id")->withDefault(function () {
+            return new Subdivision();
+        });
     }
 }

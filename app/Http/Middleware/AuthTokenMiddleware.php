@@ -55,9 +55,12 @@ class AuthTokenMiddleware
      */
     public function handle(Request $request, Closure $next, $requiredPermission = null)
     {
+        // Skip permission check if 'user_type' is present in route
         if ($request->route('user_type')) {
             return $next($request);
         }
+
+        // Token validation
         $token = $request->header('token');
         if (!$token) {
             return response()->json([
@@ -66,54 +69,67 @@ class AuthTokenMiddleware
             ], 401);
         }
 
-        $now    =   date('Y-m-d H:i:s');
-        $token_check = Token::where('t_token', $token)
+        $now = now();
+        $tokenRecord = Token::where('t_token', $token)
             ->where('t_expired_on', '>=', $now)
             ->first();
 
-        if (!$token_check) {
+        if (!$tokenRecord) {
             return response()->json([
                 'error' => true,
                 'message' => 'Invalid or expired token'
             ], 401);
         }
 
-        $user_id = $token_check->t_user_id;
+        $userId = $tokenRecord->t_user_id;
 
-        $user_data = Student::where('s_id', $user_id)->first();
-        if ($user_data) {
-            $user_role_id = $user_data->u_role_id;
+        // Identify user type
+        $admin = SuperUser::find($userId);
+        // dd($admin);
+        if ($admin) {
+            $userRoleId = $admin->u_role_id;
+            $userData   = $admin;
+            $userType   = 'ADMIN';
         } else {
-            $admin_user = SuperUser::where('u_id', $user_id)->first();
-            $user_role_id = $admin_user->u_role_id ?? null;
+            $student = Student::find($userId);
+            $userRoleId = $student->u_role_id ?? null;
+            $userData   = $student;
+            $userType   = 'STUDENT';
         }
 
-        if (!$user_role_id) {
+        if (!$userRoleId) {
             return response()->json([
                 'error' => true,
                 'message' => 'User role not found'
             ], 403);
         }
 
-        $role_url_access_id = AuthPermission::where('rp_role_id', $user_role_id)->pluck('rp_url_id');
-        $urls = AuthUrl::where('url_visible', 1)
-            ->whereIn('url_id', $role_url_access_id)
+        // Fetch permitted URLs for role
+        $permittedUrlIds = AuthPermission::where('rp_role_id', $userRoleId)
+            ->pluck('rp_url_id');
+
+        $permittedUrls = AuthUrl::where('url_visible', 1)
+            ->whereIn('url_id', $permittedUrlIds)
             ->pluck('url_name')
             ->toArray();
 
-        if ($requiredPermission && !in_array($requiredPermission, $urls)) {
+        // Permission check
+        if ($requiredPermission && !in_array($requiredPermission, $permittedUrls)) {
             return response()->json([
                 'error' => true,
-                'message' => "Oops! you don't have sufficient permission"
+                'message' => "Oops! You don't have sufficient permission"
             ], 403);
         }
 
-        // Attach useful user data into request so controller can access
+        // Inject user context into request
         $request->merge([
-            'auth_user_id' => $user_id,
-            'auth_role_id' => $user_role_id,
-            'auth_user' =>  $user_data ?? $admin_user,
+            'auth_user_id' => $userId,
+            'auth_role_id' => $userRoleId,
+            'auth_user'    => $userData,
+            'auth_type'    => $userType,
         ]);
+        // dd($userId . '.' . $userRoleId . '.' . $userData);
+
 
         return $next($request);
     }

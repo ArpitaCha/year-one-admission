@@ -131,6 +131,9 @@ class StudentController extends Controller
             $student_marksheet_url = $check_student->s_marksheet_doc
                 ? URL::to("storage/{$check_student->s_marksheet_doc}")
                 : null;
+            $student_kanyashree_url = $check_student->s_kanyashree_doc
+                ? URL::to("storage/{$check_student->s_kanyashree_doc}")
+                : null;
 
             $student_adhar_url = $check_student->s_adhar_doc
                 ? URL::to("storage/{$check_student->s_adhar_doc}")
@@ -180,6 +183,7 @@ class StudentController extends Controller
                 'student_gender' => $check_student->s_gender,
                 'student_religion' => $check_student->s_religion,
                 'student_caste' => $check_student->s_caste,
+                'is_kanyashree' => $check_student->is_kanyashree,
                 'student_tfw' => $check_student->s_tfw,
                 'student_llq' => $check_student->s_llq,
                 'student_ews' => $check_student->s_ews,
@@ -209,6 +213,7 @@ class StudentController extends Controller
                 'student_age_doc'   => $student_age_url,
                 'student_bank_passbook_doc'   => $student_bank_passbook_url,
                 'student_marksheet_doc'   => $student_marksheet_url,
+                'student_kanyashree_doc'   => $student_kanyashree_url,
                 'session_year' => $check_student->session_year,
                 'is_paid' => (bool)$check_student->is_payment,
                 'is_applied' => (bool)$check_student->is_personal_save,
@@ -405,6 +410,26 @@ class StudentController extends Controller
                 $signature->storeAs('uploads/', $signatureName, 'public');
 
                 $student_sign = $signaturePath;
+            }
+
+            $student_kanyashree_document_path = null;
+            $student_kanyashree_no = null;
+            if ($request->is_kanyashree === '1') {
+                if ($request->hasFile('student_kanyashree_document')) {
+                    $document = $request->file('student_kanyashree_document');
+                    $documentName = $form_num . '_kanyashree_document.' . $document->getClientOriginalExtension();
+                    $document->storeAs('uploads/', $documentName, 'public');
+                    $student_kanyashree_document_path = 'uploads/' . $documentName;
+                } elseif (is_string($request->student_kanyashree_document)) {
+                    $student_kanyashree_document_path =  $student->s_kanyashree_doc  ? $student->s_kanyashree_doc
+                        : null;
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Kanyashree document is mandatory when Kanyashree is selected.'
+                    ], 400);
+                }
+                $student_kanyashree_no = $request->student_kanyashree_no ?? '';
             }
 
 
@@ -630,6 +655,7 @@ class StudentController extends Controller
                     trim(strtolower($request->student_subdivision)) !== 'null'
                 ) ? $request->student_subdivision : null,
                 's_address2'          => $request->student_address2,
+                'is_kanyashree'    => $request->is_kanyashree,
                 's_pwd'               => $request->is_pwd,
                 's_photo'             => $student_photo,
                 's_sign'              => $student_sign,
@@ -643,7 +669,7 @@ class StudentController extends Controller
                 's_address'           => trim($request->student_address),
                 's_trade_code'        => $request->trade_code,
                 'is_married'          => $request->is_married,
-                's_kanyashree'        => $request->student_kanyashree_no,
+                's_kanyashree'        => $student_kanyashree_no,
                 's_tfw'     => $request->is_tfw,
                 's_ews'     => $request->is_ews,
                 's_llq'     => $request->is_llq,
@@ -668,8 +694,7 @@ class StudentController extends Controller
                 'ews_valid_year' => $ews_valid_year,
                 'pc_cert_no' => $pwd_certificate_number,
                 'pc_cert_date' => $pwd_certificate_issue_date,
-
-
+                's_kanyashree_doc'   => $student_kanyashree_document_path,
 
             ]);
 
@@ -723,7 +748,37 @@ class StudentController extends Controller
     public function downloadAdmissionFees(Request $request, $form_num)
     {
 
-        $students = Student::with('state', 'district', 'subdivision', 'block')->where(['s_appl_form_num' => $form_num])->first();
+        $students = Student::with([
+            'state:state_id_pk,state_name',
+            'district:district_id_pk,district_name'
+        ])->where('s_appl_form_num', $form_num)->first();
+
+        if ($students && is_numeric($students->s_subdivision)) {
+            $students->load('subdivision:id,name');
+        }
+        if ($students && is_numeric($students->s_block)) {
+            // Step 2: Reload with block relation
+            $students->load('block:id,name');
+        }
+        $dob = \Carbon\Carbon::parse($students->s_dob);
+        $asOnDate = \Carbon\Carbon::create(2026, 7, 1);
+        $age = $dob->diff($asOnDate);
+        $student_data = [
+            'block' => [
+                'id'   => is_numeric($students->s_block) ? $students->s_block : null,
+                'name' => is_numeric($students->s_block)
+                    ? ($students->block->name ?? '')
+                    : $students->s_block,
+            ],
+
+            'subdivision' => [
+                'id'   => is_numeric($students->s_subdivision) ? $students->s_subdivision : null,
+                'name' => is_numeric($students->s_subdivision)
+                    ? ($students->subdivision->name ?? '')
+                    : $students->s_subdivision,
+            ],
+        ];
+
         $education = JexpoApplElgbExam::with('board', 'district')->where('exam_appl_form_num', $form_num)->first();
         $bank_details = $students->s_bank_details ? json_decode($students->s_bank_details, true) : null;
         $subjects  =  $education->exam_per_marks ? json_decode($education->exam_per_marks, true) : null;
@@ -768,6 +823,8 @@ class StudentController extends Controller
             'bank_details' => $bank_details,
             'payment' => $payment,
             'qr_code' => base64_encode($qrcode),
+            'student_data' => $student_data,
+            'age' => $age
 
         ]);
         $pdf->setOption(['defaultFont' => 'sans-serif'])
@@ -818,17 +875,22 @@ class StudentController extends Controller
 
             $bank_details = $student->s_bank_details ? json_decode($student->s_bank_details, true) : [];
             $subjects     = $education && $education->exam_per_marks ? json_decode($education->exam_per_marks, true) : [];
+            // dd($subjects);
 
             $payment = PaymentTransaction::where([
                 'pmnt_modified_by' => $student->s_appl_form_num,
                 'pmnt_pay_type'    => 'APPLICATION'
             ])->first();
             $subjectMarks = [];
+
             foreach ($subjects as $subj) {
-                $key = str_replace(' ', '_', strtolower($subj['subject']));
-                $subjectMarks[$key . '_total_marks'] = $subj['total'] ?? '';
-                $subjectMarks[$key . '_obtained_marks'] = $subj['obtained'] ?? '';
+                if (!empty($subj['subject'])) {
+                    $key = str_replace(' ', '_', strtolower($subj['subject']));
+                    $subjectMarks[$key . '_total_marks'] = $subj['total'] ?? '';
+                    $subjectMarks[$key . '_obtained_marks'] = $subj['obtained'] ?? '';
+                }
             }
+
 
             return array_merge([
                 'Application Number' => $student->s_appl_form_num,

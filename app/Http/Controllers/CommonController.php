@@ -97,9 +97,9 @@ class CommonController extends Controller
 
         if ($user_type) {
             if ($state_code == null) {
-                $district_list = District::with('state:state_id_pk,state_name')->where('active_status', '1')->orderBy('district_id_pk', 'DESC')->get();
+                $district_list = District::with('state:state_id_pk,state_name')->where('active_status', '1')->orderBy('district_name', 'ASC')->get();
             } else {
-                $district_list = District::with('state:state_id_pk,state_name')->where('active_status', '1')->where('state_id_fk', $state_code)->orderBy('district_id_pk', 'DESC')->get();
+                $district_list = District::with('state:state_id_pk,state_name')->where('active_status', '1')->where('state_id_fk', $state_code)->orderBy('district_name', 'ASC')->get();
             }
             if (sizeof($district_list) > 0) {
                 $reponse = array(
@@ -118,9 +118,9 @@ class CommonController extends Controller
             }
         }
         if ($state_code == null) {
-            $district_list = District::orderBy('district_id_pk', 'ASC')->get();
+            $district_list = District::orderBy('district_name', 'ASC')->get();
         } else {
-            $district_list = District::where('state_id_fk', $state_code)->orderBy('district_id_pk', 'ASC')->get();
+            $district_list = District::where('state_id_fk', $state_code)->orderBy('district_name', 'ASC')->get();
         }
 
 
@@ -152,7 +152,7 @@ class CommonController extends Controller
             $query->where('subdivision_id', $subdivision);
         }
 
-        $block_list = $query->orderBy('id', 'DESC')->get();
+        $block_list = $query->orderBy('name', 'ASC')->get();
 
         if ($user_type) {
             return response()->json([
@@ -343,28 +343,28 @@ class CommonController extends Controller
         }
     }
 
-    //State List
-
-
-    //religion list
     public function allReligions(Request $request, $type = null)
     {
         $religion_list = [
-            'HINDUISM'     => 'HINDUISM',
-            'ISLAM'        => 'ISLAM',
-            'CHRISTIANITY' => 'CHRISTIANITY',
-            'SIKHISM'      => 'SIKHISM',
-            'BUDDHISM'     => 'BUDDHISM',
-            'JAINISM'      => 'JAINISM',
-            'OTHER'        => 'OTHER',
+            'HINDUISM',
+            'ISLAM',
+            'CHRISTIANITY',
+            'SIKHISM',
+            'BUDDHISM',
+            'JAINISM',
+            'OTHER',
         ];
 
-        if (!empty($religion_list)) {
+        $religion_array = array_map(function ($religion) {
+            return ['value' => $religion];
+        }, $religion_list);
+        if (!empty($religion_array)) {
+
             return response()->json([
                 'error'      => false,
                 'message'    => 'Religion list found',
-                'count'      => count($religion_list),
-                'religions'  => $religion_list
+                'count'      => count($religion_array),
+                'religions'  => $religion_array
             ], 200);
         }
 
@@ -401,11 +401,6 @@ class CommonController extends Controller
         ], 200);
     }
 
-
-    //Count round wise Alloted, Admitted, Rejected
-
-
-    //All Inst Admin list
     public function allInstAdminList(Request $request)
     {
         if ($request->header('token')) {
@@ -476,7 +471,7 @@ class CommonController extends Controller
             $query->where('district_id', $dist_id);
         }
 
-        $subdivision_list = $query->orderBy('id', 'DESC')->get();
+        $subdivision_list = $query->orderBy('name', 'ASC')->get();
 
         if ($subdivision_list->isNotEmpty()) {
             return response()->json([
@@ -496,7 +491,7 @@ class CommonController extends Controller
     public function eligibilityList(Request $request, $type = null)
     {
         // Fetch eligibility data
-        $eligibility_list = Eligibility::where('is_active', '1')->orderBy('id', 'ASC')->get();
+        $eligibility_list = Eligibility::where('is_active', '1')->orderBy('elgb_exam', 'ASC')->get();
 
         if ($eligibility_list->isNotEmpty()) {
             return response()->json([
@@ -518,7 +513,7 @@ class CommonController extends Controller
         // Fetch boards for the given state code
         $board_list = Board::where('is_active', '1')
             ->where('state_id_fk', $code)
-            ->orderBy('id', 'ASC')
+            ->orderBy('board_name', 'ASC')
             ->get();
 
         if ($board_list->isNotEmpty()) {
@@ -597,23 +592,34 @@ class CommonController extends Controller
             return response(json_encode($reponse), 200);
         }
     }
-    public function InstituteWiseDistrict(Request $request)
+    public function districtWiseInstitute(Request $request)
     {
-        $institute = $request->inst_code;
+        $district_code = $request->district;
+        $district = District::select('district_id_pk', 'district_name')
+            ->where('district_id_pk', $district_code)
+            ->orderBy('district_name', 'asc')->first();
+        if (!$district) {
+            return response()->json([
+                'error'   => true,
+                'message' => 'District not found'
+            ], 404);
+        }
 
-        $data = Institute::with('district')
-            ->where('i_code', $institute)
+        $data = Institute::where('i_dist_code', $district->district_name)
+            ->whereIn('i_type', ['GOVT', 'GOVT(S)'])
             ->where('is_active', 1)
-            ->first();
+            ->get();
 
         if ($data) {
             $response = [
                 'error'   => false,
                 'message' => 'data found',
-                'list'    => [
-                    'i_dist_code'     => $data->i_dist_code,
-                    'district_id'  => $data->district->district_id_pk ?? null
-                ]
+                'list'    => $data->map(function ($item) {
+                    return [
+                        'institute_name'     => $item->i_name,
+                        'inst_code'  => $item->i_code
+                    ];
+                })
             ];
         } else {
             $response = [
@@ -654,7 +660,7 @@ class CommonController extends Controller
     }
     public function OtherBoard(Request $request)
     {
-        $board_list = Board::where('is_active', '1')->where('state_code', 'OT')->orderBy('id', 'ASC')->get();
+        $board_list = Board::where('is_active', '1')->where('state_code', 'OT')->orderBy('board_name', 'ASC')->get();
         if (sizeof($board_list) > 0) {
             $reponse = array(
                 'error'     =>  false,

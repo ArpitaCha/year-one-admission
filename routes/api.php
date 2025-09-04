@@ -53,13 +53,11 @@ Route::middleware('auth.token')->group(function () {
         Route::get('/eligibility-state-list/{user_type?}', [CommonController::class, 'eligibilityStateList']);
         Route::get('/board-list/{code}/{user_type?}', [CommonController::class, 'boardList']);
         Route::get('/verifier-type', [CommonController::class, 'verifierType']);
-        Route::post('/inst-wise-district', [CommonController::class, 'InstituteWiseDistrict']);
+        Route::post('/district-wise-institute', [CommonController::class, 'districtWiseInstitute']);
         Route::get('/all_roles', [CommonController::class, 'allRoles'])->withoutMiddleware('auth.token');
         Route::get('/other-board', [CommonController::class, 'OtherBoard']);
         Route::get('/block-list/{subdivision?}/{user_type?}', [CommonController::class, 'allBlocks']);
     });
-
-    //Route::get('/master/all_roles', [CommonController::class, 'allRoles'])->withoutMiddleware('auth.token');
     Route::get('/dashboard-count', [DashboardController::class, 'countDashboardCards'])->withoutMiddleware('auth.token');
     Route::prefix('student')->group(function () {
         Route::get('/student-info/{form_num}', [StudentController::class, 'getStudentInfo'])->withoutMiddleware('auth.token');
@@ -68,7 +66,7 @@ Route::middleware('auth.token')->group(function () {
         Route::get('/student-admission-fees-download/{form_num}', [StudentController::class, 'downloadAdmissionFees'])->withoutMiddleware('auth.token');
     });
     Route::post('/students/export', [StudentController::class, 'downloadAdmissionFeesExcel'])->withoutMiddleware('auth.token');
-    Route::post('/admission-payment-fees', [PaymentController::class, 'AdmissionPaymentFees'])->withoutMiddleware('auth.token');
+    Route::post('/admission-payment-fees', [AdmissionController::class, 'AdmissionPaymentFees'])->withoutMiddleware('auth.token');
     Route::prefix('admission')->group(function () {
         Route::post('/submit', [AdmissionController::class, 'submitStudents'])->withoutMiddleware('auth.token');
         Route::get('/admission-list', [AdmissionController::class, 'admissionList']);
