@@ -255,13 +255,19 @@ class StudentController extends Controller
                     'exam_district_name' =>    $qualification->district->district_name ?? '',
                 ],
                 // 'exam_district'      => $qualification->district->district_name ?? '',
-                'exam_school_name' => $qualification->exam_school_name,
-                'exam_pass_yr'     => $qualification->exam_pass_yr,
-                'exam_tot_marks'   => $qualification->exam_tot_marks,
-                'exam_ob_marks'    => $qualification->exam_ob_marks,
-                'exam_elgb_code'   => strtoupper($qualification->exam_elgb_code),
-                'exam_marks_type'  => $qualification->exam_marks_type,
-                'exam_per_marks'   => $qualification->exam_per_marks ? json_decode($qualification->exam_per_marks, true) : null,
+                'exam_school_name' => $qualification->exam_school_name ?? '',
+                'exam_pass_yr'     => $qualification->exam_pass_yr ?? '',
+                'exam_tot_marks'   => $qualification->exam_tot_marks ?? '',
+                'exam_ob_marks'    => $qualification->exam_ob_marks ?? '',
+                'exam_elgb_code'   => strtoupper($qualification->exam_elgb_code ?? ''),
+                'exam_marks_type'  => $qualification->exam_marks_type ?? '',
+                'exam_per_marks' => optional($qualification)->exam_per_marks
+                    ? json_decode($qualification->exam_per_marks, true)
+                    : [],
+
+
+
+
 
 
             ];
@@ -624,6 +630,7 @@ class StudentController extends Controller
             }
             //
             $enc_aadhaar_num = encryptHEXFormat($request->student_aadhar_no);
+
 
             DB::beginTransaction();
             $bank_details = json_decode($request->bank_details, true);

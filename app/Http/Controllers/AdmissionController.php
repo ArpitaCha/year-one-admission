@@ -45,7 +45,7 @@ class AdmissionController extends Controller
                 'student_guardian_name' => ['required'],
                 'student_dob'          => ['required'],
                 'student_aadhar_no'    => ['required', 'unique:jexpo_register_student,s_aadhar_no'],
-                'student_email'        => ['required', 'email'],
+                'student_email'        => ['required', 'email', 'unique:jexpo_register_student,s_email'],
                 'student_gender'       => ['required'],
                 'student_religion'     => ['required'],
                 'student_caste'        => ['required'],
@@ -142,6 +142,14 @@ class AdmissionController extends Controller
             } else {
                 $s_appl_form_num = $student->s_appl_form_num;
                 $enc_aadhaar_num = encryptHEXFormat($request->student_aadhar_no);
+                $exists = Student::where('s_aadhar_no', $enc_aadhaar_num)->exists();
+
+                if ($exists) {
+                    return response()->json([
+                        'error' => true,
+                        'message' => 'This Aadhaar number already exists'
+                    ], 400);
+                }
                 $now = now();
                 $year = date('Y');
                 $sessionYear = sessionYear($year);
@@ -437,9 +445,6 @@ class AdmissionController extends Controller
                     'insert'
                 );
 
-
-
-
                 return response()->json([
                     'success' => true,
                     'message' => 'Application submitted successfully',
@@ -524,7 +529,7 @@ class AdmissionController extends Controller
             $status = "REJECTED";
             $message = "Admission rejected";
         }
-        auditTrail($user_id, "$form_num, $status - Added successfully");
+        auditTrail($user_id, "$form_num, $status - Approve successfully");
         return response()->json([
             'error' => false,
             'message' => $message
@@ -536,47 +541,59 @@ class AdmissionController extends Controller
         $userData = $request->auth_user ?? null;
 
         if ($roleId == 1) {
-            $list = SuperUser::whereNotIn('u_role_id', [1])->with('role', 'district')->get()->map(function ($data) {
-                return [
-                    'institute' => [
-                        'inst_code'   => $data->u_inst_code ?? '',
-                        'inst_name' => $data->u_inst_name ?? '',
-                    ],
-                    'phone_no' => $data->u_phone,
-                    'name' => $data->u_fullname,
-                    'email' => $data->u_email,
-                    'username' => $data->u_username,
-                    'district' => [
-                        'district_id'   => optional($data->district)->district_id_pk,
-                        'district_name' => optional($data->district)->district_name,
-                    ],
-                    'role'      => [
-                        'role_id'   => $data->u_role_id ?? '',
-                        'role_name' => optional($data->role)->role_name,
-                    ],
-                ];
-            });
+            $list = SuperUser::whereNotIn('u_role_id', [1])   // exclude head verifier
+                ->where('is_active', 1)                       // only active
+                ->with('role', 'district')
+                ->get()
+                ->map(function ($data) {
+                    return [
+                        'institute' => [
+                            'inst_code'   => $data->u_inst_code ?? '',
+                            'inst_name'   => $data->u_inst_name ?? '',
+                        ],
+                        'phone_no' => $data->u_phone,
+                        'name'     => $data->u_fullname,
+                        'email'    => $data->u_email,
+                        'username' => $data->u_username,
+                        'is_active' => (bool)$data->is_active,
+                        'district' => [
+                            'district_id'   => optional($data->district)->district_id_pk,
+                            'district_name' => optional($data->district)->district_name,
+                        ],
+                        'role' => [
+                            'role_id'   => $data->u_role_id ?? '',
+                            'role_name' => optional($data->role)->role_name,
+                        ],
+                    ];
+                });
         } elseif ($roleId == 3) {
-            $list = SuperUser::where('u_role_id', 4)->where('u_inst_code', $userData->u_inst_code)->where('u_inst_district', $userData->u_inst_district)->with('role', 'district')->get()->map(function ($data) {
-                return [
-                    'institute' => [
-                        'inst_code'   => $data->u_inst_code ?? '',
-                        'inst_name' => $data->u_inst_name ?? '',
-                    ],
-                    'phone_no' => $data->u_phone,
-                    'name' => $data->u_fullname,
-                    'email' => $data->u_email,
-                    'username' => $data->u_username,
-                    'district' => [
-                        'district_id'   => optional($data->district)->district_id_pk,
-                        'district_name' => optional($data->district)->district_name,
-                    ],
-                    'role'      => [
-                        'role_id'   => $data->u_role_id ?? '',
-                        'role_name' => optional($data->role)->role_name,
-                    ],
-                ];
-            });
+            $list = SuperUser::where('u_role_id', 4)                  // only verifiers
+                ->where('u_inst_code', $userData->u_inst_code)        // same institute
+                ->where('u_inst_district', $userData->u_inst_district) // same district
+                ->where('is_active', 1)                               // only active
+                ->with('role', 'district')
+                ->get()
+                ->map(function ($data) {
+                    return [
+                        'institute' => [
+                            'inst_code'   => $data->u_inst_code ?? '',
+                            'inst_name'   => $data->u_inst_name ?? '',
+                        ],
+                        'phone_no' => $data->u_phone,
+                        'name'     => $data->u_fullname,
+                        'email'    => $data->u_email,
+                        'username' => $data->u_username,
+                        'is_active' => (bool)$data->is_active,
+                        'district' => [
+                            'district_id'   => optional($data->district)->district_id_pk,
+                            'district_name' => optional($data->district)->district_name,
+                        ],
+                        'role' => [
+                            'role_id'   => $data->u_role_id ?? '',
+                            'role_name' => optional($data->role)->role_name,
+                        ],
+                    ];
+                });
         }
         if (sizeof($list) > 0) {
             $reponse = array(
@@ -620,20 +637,76 @@ class AdmissionController extends Controller
 
         // Check if phone already exists for the role
         $roleId = $request->role_id;
-        if (SuperUser::where('u_role_id', $roleId)->where('u_phone', $request->phone_no)->exists()) {
-            $message = $roleId == 3 ? 'Head Verifier already exists with this phone number' : 'Verifier already exists with this phone number';
-            return response()->json(['error' => true, 'message' => $message], 400);
-        }
+        if ($roleId == 3) {
 
-        // Check if normalized name already exists for the role
-        if (SuperUser::where('u_role_id', $roleId)
-            ->whereRaw('LOWER(REGEXP_REPLACE(u_fullname, \'\\s+\', \' \', \'g\')) = ?', [strtolower($normalizedName)])
-            ->exists()
-        ) {
-            $message = $roleId == 3 ? 'Head Verifier already exists with this name' : 'Verifier already exists with this name';
-            return response()->json(['error' => true, 'message' => $message], 400);
-        }
+            // 1. Check phone number
+            if (SuperUser::where('u_role_id', 3)->where('u_phone', $request->phone_no)->exists()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Head Verifier already exists with this phone number'
+                ], 400);
+            }
 
+            // 2. Check institute (only one Head Verifier per institute)
+            if (SuperUser::where('u_role_id', 3)->where('u_inst_code', $request->inst_code)->exists()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Head Verifier already exists with this institute'
+                ], 400);
+            }
+
+            // 3. Check normalized name
+            // if (SuperUser::where('u_role_id', 3)
+            //     ->whereRaw("LOWER(REGEXP_REPLACE(u_fullname, '\\s+', ' ', 'g')) = ?", [strtolower($normalizedName)])
+            //     ->exists()
+            // ) {
+            //     return response()->json([
+            //         'error' => true,
+            //         'message' => 'Head Verifier already exists with this name'
+            //     ], 400);
+            // }
+            if (SuperUser::where('u_role_id', 3)
+                ->where('u_email', $request->email)
+                ->exists()
+            ) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Head Verifier already exists with this email'
+                ], 400);
+            }
+        }
+        if ($roleId == 4) {
+
+            // Check phone
+            if (SuperUser::where('u_role_id', 4)->where('u_phone', $request->phone_no)->exists()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Verifier already exists with this phone number'
+                ], 400);
+            }
+
+            // // Check name
+            // if (SuperUser::where('u_role_id', 4)
+            //     ->whereRaw("LOWER(REGEXP_REPLACE(u_fullname, '\\s+', ' ', 'g')) = ?", [strtolower($normalizedName)])
+            //     ->exists()
+            // ) {
+            //     return response()->json([
+            //         'error' => true,
+            //         'message' => 'Verifier already exists with this name'
+            //     ], 400);
+            // }
+            if (SuperUser::where('u_role_id', 4)
+                ->where('u_email', $request->email)
+                ->exists()
+            ) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Verifier already exists with this email'
+                ], 400);
+            }
+        }
+        $user_id = $request->auth_user_id ?? null;
+        $now = now();
         // Create the user
         $superUser = SuperUser::create([
             'u_fullname'      => $normalizedName,
@@ -648,6 +721,7 @@ class AdmissionController extends Controller
         ]);
 
         if ($superUser) {
+            auditTrail("{$normalizedName} has successfully created headverifier  at {$user_id} on {$now}.", 'insert');
             return response()->json([
                 'error'   => false,
                 'message' => 'User created successfully',
@@ -672,6 +746,7 @@ class AdmissionController extends Controller
             'role_id'  => 'required|in:3,4', // ensure role is valid
 
         ]);
+        $now = now();
 
         if ($validated->fails()) {
             return response()->json([
@@ -717,7 +792,7 @@ class AdmissionController extends Controller
             'u_inst_district' => $request->district,
             'updated_at'      => now()
         ]);
-
+        auditTrail("{$normalizedName} has successfully updated headverifier  at {$existingUser->u_id} on {$now}.", 'update');
         return response()->json([
             'error'   => false,
             'message' => 'User updated successfully',
@@ -789,10 +864,11 @@ class AdmissionController extends Controller
             $verifiers = SuperUser::with(['HeadVerifierStudentAssign' => function ($query) use ($district_id) {
                 $query->where('dist_id', $district_id);
             }, 'institute'])
-                ->select('u_id', 'u_fullname', 'u_inst_code')
+                ->select('u_id', 'u_fullname', 'u_inst_code', 'u_phone')
                 ->where('u_role_id', 3)
                 ->where('u_inst_district', $district_id)
                 ->get();
+
 
             // Build verifier list with student count
             $verifier_list = $verifiers->map(function ($verifier) use ($district_id) {
@@ -804,6 +880,7 @@ class AdmissionController extends Controller
                     'verifier_id'        => $verifier->u_id,
                     'verifier_name'      => $verifier->u_fullname,
                     'verifier_inst_name' => optional($verifier->institute)->i_name,
+                    'verifier_phone'     => $verifier->u_phone,
                     'student_count'      => $student_count,
                 ];
             });
@@ -837,9 +914,10 @@ class AdmissionController extends Controller
 
             // Get all verifiers under this head verifier's district
             $verifierList = SuperUser::with('institute')
-                ->select('u_id', 'u_fullname')
+                ->select('u_id', 'u_fullname', 'u_inst_code', 'u_phone')
                 ->where('u_role_id', 4) // Regular verifier
                 ->where('u_inst_district', $district_id)
+
                 ->get()
                 ->map(function ($verifier) use ($authUserId, $district_id) {
                     $studentCount = VerifierStudentAssign::where([
@@ -853,11 +931,13 @@ class AdmissionController extends Controller
                         'verifier_id'   => $verifier->u_id,
                         'verifier_name' => $verifier->u_fullname,
                         'student_count' => $studentCount,
+                        'verifier_phone' => $verifier->u_phone,
                         // Optional: include institute name if needed
-                        'institute_name' => $verifier->institute->name ?? null,
+                        'verifier_inst_name' => optional($verifier->institute)->i_name,
                     ];
                 });
 
+            // dd($verifierList);
             $count = $verifierList->count(); // total verifiers under head
 
             // Total students assigned to this head verifier
@@ -897,7 +977,6 @@ class AdmissionController extends Controller
 
             $districtId = $request->input('district_id');
 
-            // Step 1: Fetch unassigned, paid students from the district
             $students = Student::where('s_home_district', $districtId)
                 ->where('is_payment', 1)
                 ->where('is_assign', 0)
@@ -906,8 +985,6 @@ class AdmissionController extends Controller
             if ($students->isEmpty()) {
                 return response()->json(['message' => 'No unassigned students found'], 404);
             }
-
-            // Step 2: Fetch head verifiers from the district
             $verifiers = SuperUser::where('u_role_id', 3)
                 ->where('u_inst_district', $districtId)
                 ->get(['u_id', 'u_fullname', 'u_inst_code']);
@@ -915,8 +992,6 @@ class AdmissionController extends Controller
             if ($verifiers->isEmpty()) {
                 return response()->json(['message' => 'No head verifiers found'], 404);
             }
-
-            // Step 3: Calculate distribution
             $totalStudents  = $students->count();
             $totalVerifiers = $verifiers->count();
             $perVerifier    = intdiv($totalStudents, $totalVerifiers);
@@ -924,8 +999,6 @@ class AdmissionController extends Controller
 
             $distribution   = [];
             $studentIndex   = 0;
-
-            // Step 4: Assign students to verifiers
             foreach ($verifiers as $index => $verifier) {
                 $count = $perVerifier + ($index < $extra ? 1 : 0);
                 $assignedStudents = $students->slice($studentIndex, $count);
@@ -933,8 +1006,6 @@ class AdmissionController extends Controller
                 if ($assignedStudents->isEmpty()) {
                     continue;
                 }
-
-                // Insert assignments
                 foreach ($assignedStudents as $formNum) {
                     HeadVerifierStudentAssign::create([
                         'head_verifier_id'   => $verifier->u_id,
@@ -944,12 +1015,8 @@ class AdmissionController extends Controller
                         'created_at'         => now(),
                     ]);
                 }
-
-                // Update student assignment status
                 Student::whereIn('s_appl_form_num', $assignedStudents)
                     ->update(['is_assign' => 1]);
-
-                // Track distribution summary
                 $distribution[] = [
                     'verifier_id'   => $verifier->u_id,
                     'verifier_name' => $verifier->u_fullname,
@@ -958,8 +1025,10 @@ class AdmissionController extends Controller
 
                 $studentIndex += $count;
             }
-
-            // Step 5: Return response
+            auditTrail(
+                "Students have been successfully distributed to verifiers by head verifier ID {$user_id} on " . now(),
+                'distribute'
+            );
             return response()->json([
                 'message'         => 'Students assigned successfully to head verifiers',
                 'total_students'  => $totalStudents,
@@ -969,7 +1038,6 @@ class AdmissionController extends Controller
         } elseif ($role_id == 3) {
             $user_id = $request->auth_user_id ?? null;
 
-            // Step 1: Validate Head Verifier
             $headVerifier = SuperUser::where('u_id', $user_id)
                 ->where('u_role_id', 3)
                 ->first();
@@ -977,8 +1045,6 @@ class AdmissionController extends Controller
             if (!$headVerifier) {
                 return response()->json(['message' => 'Invalid Head Verifier'], 404);
             }
-
-            // Step 2: Fetch child verifiers under same institution and district
             $childVerifiers = SuperUser::where('u_role_id', 4)
                 ->where('u_inst_code', $headVerifier->u_inst_code)
                 ->where('u_inst_district', $districtId)
@@ -987,8 +1053,6 @@ class AdmissionController extends Controller
             if ($childVerifiers->isEmpty()) {
                 return response()->json(['message' => 'No verifiers found under this head verifier'], 404);
             }
-
-            // Step 3: Fetch students assigned to head verifier but not yet distributed
             $students =   HeadVerifierStudentAssign::where('head_verifier_id', $user_id)
                 ->where('dist_id', $districtId)
                 ->whereHas('student', function ($query) {
@@ -1000,8 +1064,6 @@ class AdmissionController extends Controller
             if ($students->isEmpty()) {
                 return response()->json(['message' => 'No students to distribute'], 404);
             }
-
-            // Step 4: Calculate distribution
             $totalStudents  = $students->count();
             $totalVerifiers = $childVerifiers->count();
             $perVerifier    = intdiv($totalStudents, $totalVerifiers);
@@ -1009,8 +1071,6 @@ class AdmissionController extends Controller
 
             $distribution = [];
             $studentIndex = 0;
-
-            // Step 5: Distribute students to child verifiers
             DB::beginTransaction();
 
             try {
@@ -1047,8 +1107,7 @@ class AdmissionController extends Controller
                 }
 
                 DB::commit();
-
-                // Step 6: Return response
+                auditTrail("Students have been successfully distributed to verifiers by head verifier ID {$user_id} on " . now(), 'distribute');
                 return response()->json([
                     'message'         => 'Students distributed successfully to verifiers',
                     'total_students'  => $totalStudents,
@@ -1066,31 +1125,41 @@ class AdmissionController extends Controller
     }
     public function otherdistrictverifier(Request $request)
     {
-        $today = now();
+        if ($request->district === 'OTHER') {
+            $effective_district_id = 15; // force to district 15
+            $authUserId = $request->auth_user_id; // head verifier ID
 
-        // Force district logic to Howrah if another district is passed
-        $howrah_id = '15';
-        $effective_district_id = ($district_id == $howrah_id) ? $district_id : $howrah_id;
+            // Get all verifiers (role_id = 4) under district 15
+            $verifierList = SuperUser::with('institute')
+                ->select('u_id', 'u_fullname', 'u_inst_code', 'u_phone')
+                ->where('u_role_id', 3) // Regular verifier
+                ->where('u_inst_district', $effective_district_id)
+                ->get()
+                ->map(function ($verifier) use ($authUserId, $effective_district_id) {
+                    // Count students assigned to this verifier under the head
+                    $studentCount = VerifierStudentAssign::where([
+                        ['verifier_id', '=', $verifier->u_id],
+                        ['head_verifier_id', '=', $authUserId],
+                        ['dist_id', '=', $effective_district_id],
+                    ])->count();
 
-        // Get all head verifiers in the effective district
-        $verifiers = SuperUser::with([
-            'HeadVerifierStudentAssign' => function ($query) use ($effective_district_id) {
-                $query->where('dist_id', $effective_district_id);
-            },
-            'institute',
-            'district'
-        ])
-            ->select('u_id', 'u_fullname', 'u_inst_code', 'u_inst_district')
-            ->where('u_role_id', 3)
-            ->where('u_inst_district', $effective_district_id)
-            ->get();
-        $verifier_list = $verifiers->map(function ($verifier) use ($effective_district_id) {
-            $student_count = HeadVerifierStudentAssign::where('dist_id', $effective_district_id)
-                ->where('head_verifier_id', $verifier->u_id)
+                    return [
+                        'verifier_id'        => $verifier->u_id,
+                        'verifier_name'      => $verifier->u_fullname,
+                        'student_count'      => $studentCount,
+                        'verifier_phone'     => $verifier->u_phone,
+                        'verifier_inst_name' => optional($verifier->institute)->i_name,
+                    ];
+                });
+
+            $count = $verifierList->count(); // total verifiers under head
+
+            // Total students assigned to this head verifier (in dist 15)
+            $student_list = HeadVerifierStudentAssign::where('dist_id', $effective_district_id)
+                ->where('head_verifier_id', $authUserId)
                 ->count();
 
-
-            // Total students distributed (assigned + distributed)
+            // Students distributed (assigned + distributed)
             $assignStudentCount = HeadVerifierStudentAssign::where('head_verifier_id', $authUserId)
                 ->where('dist_id', $effective_district_id)
                 ->whereHas('student', function ($query) {
@@ -1098,16 +1167,61 @@ class AdmissionController extends Controller
                         ->where('is_distribute', 1);
                 })
                 ->count();
-            $left_student_list = $student_count - $assignStudentCount;
 
-            return [
-                'verifier_id'        => $verifier->u_id,
-                'verifier_name'      => $verifier->u_fullname,
+            // Remaining students under this head verifier
+            $left_student_list = $student_list - $assignStudentCount;
 
-                'student_count'      => $student_count,
+            return response()->json([
+                'error' => false,
+                'distribution' => $verifierList,
+                'count' => $count,
+                'student_count' => $student_list,
                 'assigned_student_count' => $assignStudentCount,
-                'left_student_count' => $left_student_list,
-            ];
-        });
+                'left_student_count' => $left_student_list
+            ]);
+        }
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Invalid request',
+        ]);
+    }
+    public function inActiveVerifier(Request $request)
+    {
+        $validated = Validator::make($request->all(), [
+            'phone_no' => 'required',
+        ]);
+
+        if ($validated->fails()) {
+            return response()->json([
+                'error'   => true,
+                'message' => $validated->errors()->first()
+            ], 422);
+        }
+        $authUserId = $request->auth_user_id;
+        $user = SuperUser::where('u_phone', $request->phone_no)->first();
+
+        if (!$user) {
+            return response()->json([
+                'error'   => true,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // Always set inactive
+        $user->is_active = 0;
+        $user->updated_at = now();
+        $user->save();
+        auditTrail(
+            "User ID {$user->u_id} has been deactivated by Head Verifier ID {$authUserId} on " . now(),
+            'distribute'
+        );
+
+
+        return response()->json([
+            'error'   => false,
+            'message' => "User has been successfully deactivated",
+            'data'    => $user
+        ]);
     }
 }
